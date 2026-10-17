@@ -1,0 +1,26 @@
+[
+    {
+        "merged": "ru.fortport.client.app-mergeDebugResources-33:/layout/item_chat_message.xml",
+        "source": "ru.fortport.client.app-main-36:/layout/item_chat_message.xml"
+    },
+    {
+        "merged": "C:\\Users\\Владислав\\.gradle\\daemon\\8.7\\ru.fortport.client.app-mergeDebugResources-33:\\layout\\item_chat_message.xml",
+        "source": "C:\\Users\\Владислав\\.gradle\\daemon\\8.7\\ru.fortport.client.app-main-36:\\layout\\item_chat_message.xml"
+    },
+    {
+        "merged": "C:\\Users\\Владислав\\.gradle\\daemon\\8.7\\ru.fortport.client.app-mergeDebugResources-33:\\layout\\activity_main.xml",
+        "source": "C:\\Users\\Владислав\\.gradle\\daemon\\8.7\\ru.fortport.client.app-main-36:\\layout\\activity_main.xml"
+    },
+    {
+        "merged": "C:\\Users\\Владислав\\.gradle\\daemon\\8.7\\ru.fortport.client.app-mergeDebugResources-33:\\layout\\item_chat_date.xml",
+        "source": "C:\\Users\\Владислав\\.gradle\\daemon\\8.7\\ru.fortport.client.app-main-36:\\layout\\item_chat_date.xml"
+    },
+    {
+        "merged": "C:\\Users\\Владислав\\.gradle\\daemon\\8.7\\ru.fortport.client.app-mergeDebugResources-33:\\layout\\activity_photo_viewer.xml",
+        "source": "C:\\Users\\Владислав\\.gradle\\daemon\\8.7\\ru.fortport.client.app-main-36:\\layout\\activity_photo_viewer.xml"
+    },
+    {
+        "merged": "C:\\Users\\Владислав\\.gradle\\daemon\\8.7\\ru.fortport.client.app-mergeDebugResources-33:\\layout\\activity_chat.xml",
+        "source": "C:\\Users\\Владислав\\.gradle\\daemon\\8.7\\ru.fortport.client.app-main-36:\\layout\\activity_chat.xml"
+    }
+]

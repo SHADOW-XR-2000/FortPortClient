@@ -1,0 +1,9 @@
+<resources>
+    <color name="fp_primary">#1B2A4A</color>
+    <color name="fp_primary_dark">#101A30</color>
+    <color name="fp_accent">#3D7BFF</color>
+    <color name="fp_background">#FFFFFF</color>
+    <color name="fp_surface">#F4F5F7</color>
+    <color name="fp_on_background">#111318</color>
+    <color name="fp_topbar_bg">#009DFF</color>
+</resources>
