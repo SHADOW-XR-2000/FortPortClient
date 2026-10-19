@@ -1,4 +1,0 @@
-#Sun Oct 11 13:27:57 KRAT 2026
-base.0=D\:\\NETFolder\\git\\FortPortClient\\app\\build\\intermediates\\dex\\release\\mergeDexRelease\\classes.dex
-path.0=classes.dex
-renamed.0=classes.dex
