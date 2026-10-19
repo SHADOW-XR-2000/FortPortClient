@@ -78,6 +78,379 @@
 
     </LinearLayout>
 
+    <!-- Нативный список друзей: поверх WebView, под шапкой раздела и нижней панелью. -->
+    <FrameLayout
+        android:id="@+id/nativeFriendsPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#C7EAF5"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/nativeFriendsBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:importantForAccessibility="no" />
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/friendsSwipe"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/friendsRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="12dp"
+                android:paddingTop="136dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="72dp" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="78dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/bg_chat_card">
+
+            <EditText
+                android:id="@+id/friendsSearch"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/transparent"
+                android:hint="Поиск пользователей..."
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1"
+                android:paddingHorizontal="14dp"
+                android:textColor="@color/fp_chat_name"
+                android:textColorHint="@color/fp_chat_sub"
+                android:textSize="16sp" />
+
+        </FrameLayout>
+
+    </FrameLayout>
+
+    <!-- Нативный список переписок: поверх WebView, под шапкой раздела и нижней панелью. -->
+    <FrameLayout
+        android:id="@+id/nativeChatsPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#C7EAF5"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/nativeChatsBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:importantForAccessibility="no" />
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/chatsSwipe"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/chatsRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="12dp"
+                android:paddingTop="82dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="72dp" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        <TextView
+            android:id="@+id/chatsEmpty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_chat_card"
+            android:padding="16dp"
+            android:textColor="@color/fp_chat_name"
+            android:textSize="15sp"
+            android:visibility="gone" />
+
+    </FrameLayout>
+
+    <!-- Нативный список портов: поверх WebView, под шапкой раздела и нижней панелью. -->
+    <FrameLayout
+        android:id="@+id/nativeCommunitiesPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#C7EAF5"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/nativeCommunitiesBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:importantForAccessibility="no" />
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/communitiesSwipe"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/communitiesRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="12dp"
+                android:paddingTop="136dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="72dp" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="78dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/bg_chat_card">
+
+            <EditText
+                android:id="@+id/communitiesSearch"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/transparent"
+                android:hint="Поиск портов..."
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1"
+                android:paddingHorizontal="14dp"
+                android:textColor="@color/fp_chat_name"
+                android:textColorHint="@color/fp_chat_sub"
+                android:textSize="16sp" />
+
+        </FrameLayout>
+
+    </FrameLayout>
+
+    <!-- Нативная музыка: поверх WebView, под шапкой раздела и нижней панелью. -->
+    <FrameLayout
+        android:id="@+id/nativeMusicPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#C7EAF5"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/nativeMusicBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:importantForAccessibility="no" />
+
+        <!-- Диск по центру экрана и по ширине; крутится, пока играет музыка. -->
+        <ImageView
+            android:id="@+id/musicDisc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:adjustViewBounds="true"
+            android:alpha="0.9"
+            android:scaleType="fitCenter"
+            android:importantForAccessibility="no" />
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/musicSwipe"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/musicRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="12dp"
+                android:paddingTop="252dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="72dp" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        <TextView
+            android:id="@+id/musicEmpty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_chat_card"
+            android:padding="16dp"
+            android:text="В библиотеке пока нет аудио.\nНажмите кнопку загрузки вверху справа"
+            android:gravity="center"
+            android:textColor="@color/fp_chat_name"
+            android:textSize="15sp"
+            android:visibility="gone" />
+
+        <!-- Плеер: всплывающая плашка, список под ней прокручивается. -->
+        <LinearLayout
+            android:id="@+id/musicPlayerCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="78dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/bg_music_player"
+            android:elevation="6dp"
+            android:orientation="vertical"
+            android:paddingHorizontal="14dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="8dp">
+
+            <ru.fortport.client.MarqueeTextView
+                android:id="@+id/musicTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:textColor="@color/fp_chat_name"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/musicArtist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:gravity="center_horizontal"
+                android:maxLines="1"
+                android:textColor="@color/fp_chat_sub"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/musicTimeCurrent"
+                    android:layout_width="40dp"
+                    android:layout_height="wrap_content"
+                    android:text="0:00"
+                    android:textColor="@color/fp_chat_sub"
+                    android:textSize="12sp" />
+
+                <ru.fortport.client.GradientSeekBar
+                    android:id="@+id/musicSeek"
+                    android:layout_width="0dp"
+                    android:layout_height="32dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/musicTimeTotal"
+                    android:layout_width="40dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:text="0:00"
+                    android:textColor="@color/fp_chat_sub"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/musicShuffle"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="Случайное проигрывание"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/audio_random" />
+
+                <ImageButton
+                    android:id="@+id/musicPrev"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="Предыдущий трек"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/audio_previous" />
+
+                <ImageButton
+                    android:id="@+id/musicPlay"
+                    android:layout_width="0dp"
+                    android:layout_height="56dp"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="Воспроизведение"
+                    android:padding="4dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/audio_play" />
+
+                <ImageButton
+                    android:id="@+id/musicNext"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="Следующий трек"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/audio_next" />
+
+                <ImageButton
+                    android:id="@+id/musicRepeat"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="Повтор трека"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/audio_repeat" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+    </FrameLayout>
+
     <LinearLayout
         android:id="@+id/topNavBar"
         android:layout_width="0dp"
@@ -201,6 +574,56 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/sectionHeader"
+        android:layout_width="0dp"
+        android:layout_height="70dp"
+        android:background="@color/fp_topbar_bg"
+        android:elevation="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/sectionHeaderIcon"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:scaleType="fitCenter"
+            android:importantForAccessibility="no" />
+
+        <TextView
+            android:id="@+id/sectionHeaderTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:textColor="@android:color/white"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <ImageButton
+            android:id="@+id/sectionHeaderAction"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="Загрузить аудио с устройства"
+            android:padding="2dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/audio_upload"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/bottomNavBar"
         android:layout_width="0dp"
         android:layout_height="60dp"
@@ -241,14 +664,37 @@
             android:background="#55808080"
             android:visibility="gone" />
 
-        <ImageButton
-            android:id="@+id/navAddPost"
+        <FrameLayout
+            android:id="@+id/navCenterSlot"
             android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:background="@android:color/transparent"
-            android:padding="2dp"
-            android:scaleType="fitCenter"
-            android:contentDescription="@string/nav_add_post" />
+            android:layout_height="60dp"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <ImageButton
+                android:id="@+id/navAddPost"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:layout_gravity="center"
+                android:background="@android:color/transparent"
+                android:padding="2dp"
+                android:scaleType="fitCenter"
+                android:contentDescription="@string/nav_add_post" />
+
+            <!-- «Домой» занимает место кнопки поста в разделах, где постить нельзя. -->
+            <ImageButton
+                android:id="@+id/navHomeCenter"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_gravity="center"
+                android:background="@android:color/transparent"
+                android:padding="2dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_nav_home"
+                android:visibility="gone"
+                android:contentDescription="@string/nav_home" />
+
+        </FrameLayout>
 
         <View
             android:id="@+id/navGapDividerRight"

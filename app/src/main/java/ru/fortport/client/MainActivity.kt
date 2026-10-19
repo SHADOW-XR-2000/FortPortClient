@@ -47,6 +47,28 @@ class MainActivity : AppCompatActivity() {
     private var lastLoadFailed = false
     private lateinit var bottomNavBar: LinearLayout
     private lateinit var topNavBar: LinearLayout
+    private lateinit var sectionHeader: LinearLayout
+    private lateinit var sectionHeaderIcon: ImageView
+    private lateinit var sectionHeaderTitle: TextView
+    private lateinit var navHomeCenter: ImageButton
+    private lateinit var siteApi: SiteApi
+    private lateinit var nativeChatsPanel: View
+    private lateinit var nativeFriendsPanel: View
+    private lateinit var nativeCommunitiesPanel: View
+    private lateinit var nativeMusicPanel: View
+    private lateinit var sectionHeaderAction: ImageButton
+    private lateinit var chatsController: ChatsListController
+    private lateinit var friendsController: FriendsListController
+    private lateinit var communitiesController: CommunitiesListController
+    private lateinit var musicController: MusicController
+
+    /** Нативные экраны, которые показываются поверх WebView вместо веб-страниц /chats и /friends. */
+    private enum class NativeSection { CHATS, FRIENDS, COMMUNITIES, MUSIC }
+    private var nativeSection: NativeSection? = null
+    /** Из нативного списка открыли профиль: «Назад» вернёт в этот список. */
+    private var returnSection: NativeSection? = null
+    /** Последний известный адрес страницы (в т.ч. после JS-роутинга сайта без перезагрузки). */
+    private var currentUrl: String? = null
     private lateinit var navProfileAvatar: ImageView
     private lateinit var navNotifBadge: TextView
     private lateinit var navCoinsValue: TextView
@@ -100,6 +122,89 @@ class MainActivity : AppCompatActivity() {
         loadOfflineImage()
         bottomNavBar = findViewById(R.id.bottomNavBar)
         topNavBar = findViewById(R.id.topNavBar)
+        sectionHeader = findViewById(R.id.sectionHeader)
+        sectionHeaderIcon = findViewById(R.id.sectionHeaderIcon)
+        sectionHeaderTitle = findViewById(R.id.sectionHeaderTitle)
+        navHomeCenter = findViewById(R.id.navHomeCenter)
+        nativeChatsPanel = findViewById(R.id.nativeChatsPanel)
+        nativeFriendsPanel = findViewById(R.id.nativeFriendsPanel)
+        nativeCommunitiesPanel = findViewById(R.id.nativeCommunitiesPanel)
+        nativeMusicPanel = findViewById(R.id.nativeMusicPanel)
+        sectionHeaderAction = findViewById(R.id.sectionHeaderAction)
+        siteApi = SiteApi(this)
+        val defaultBg = loadAssetIcon("styles/bg.webp")
+        siteApi.attachBackground(findViewById(R.id.nativeChatsBg), defaultBg)
+        siteApi.attachBackground(findViewById(R.id.nativeFriendsBg), defaultBg)
+        siteApi.attachBackground(findViewById(R.id.nativeCommunitiesBg), defaultBg)
+        siteApi.attachBackground(findViewById(R.id.nativeMusicBg), defaultBg)
+        val openChat: (String) -> Unit = { json ->
+            startActivity(Intent(this, ChatActivity::class.java).putExtra(ChatActivity.EXTRA_PAYLOAD, json))
+        }
+        val authLost: () -> Unit = {
+            hideNativeSection()
+            refreshCdCoinsBalance() // 401 → общий сценарий выхода на страницу входа
+        }
+        chatsController = ChatsListController(
+            activity = this,
+            api = siteApi,
+            swipe = findViewById(R.id.chatsSwipe),
+            recycler = findViewById(R.id.chatsRecycler),
+            emptyView = findViewById(R.id.chatsEmpty),
+            onOpenChat = openChat,
+            onAuthLost = authLost
+        )
+        friendsController = FriendsListController(
+            activity = this,
+            api = siteApi,
+            swipe = findViewById(R.id.friendsSwipe),
+            recycler = findViewById(R.id.friendsRecycler),
+            searchInput = findViewById(R.id.friendsSearch),
+            onOpenChat = openChat,
+            onOpenProfile = { id ->
+                returnSection = nativeSection
+                hideNativeSection()
+                webView.loadUrl("$SITE_ORIGIN/profile?id=$id")
+            },
+            onAuthLost = authLost
+        )
+        communitiesController = CommunitiesListController(
+            activity = this,
+            api = siteApi,
+            swipe = findViewById(R.id.communitiesSwipe),
+            recycler = findViewById(R.id.communitiesRecycler),
+            searchInput = findViewById(R.id.communitiesSearch),
+            onOpenCommunity = { id ->
+                returnSection = nativeSection
+                hideNativeSection()
+                webView.loadUrl("$SITE_ORIGIN/community?id=$id")
+            },
+            onCreateCommunity = {
+                returnSection = nativeSection
+                hideNativeSection()
+                webView.loadUrl("$SITE_ORIGIN/new_community")
+            },
+            onAuthLost = authLost
+        )
+        musicController = MusicController(
+            activity = this,
+            api = siteApi,
+            swipe = findViewById(R.id.musicSwipe),
+            recycler = findViewById(R.id.musicRecycler),
+            emptyView = findViewById(R.id.musicEmpty),
+            disc = findViewById(R.id.musicDisc),
+            titleView = findViewById(R.id.musicTitle),
+            artistView = findViewById(R.id.musicArtist),
+            timeCurrent = findViewById(R.id.musicTimeCurrent),
+            timeTotal = findViewById(R.id.musicTimeTotal),
+            seek = findViewById(R.id.musicSeek),
+            btnShuffle = findViewById(R.id.musicShuffle),
+            btnPrev = findViewById(R.id.musicPrev),
+            btnPlay = findViewById(R.id.musicPlay),
+            btnNext = findViewById(R.id.musicNext),
+            btnRepeat = findViewById(R.id.musicRepeat),
+            onAuthLost = authLost
+        )
+        sectionHeaderAction.setOnClickListener { musicController.pickFromDevice() }
         navProfileAvatar = findViewById(R.id.navProfileAvatar)
         navNotifBadge = findViewById(R.id.navNotifBadge)
         navCoinsValue = findViewById(R.id.navCoinsValue)
@@ -176,6 +281,14 @@ class MainActivity : AppCompatActivity() {
             ): Boolean {
                 val url = request.url
                 Log.d(TAG, "nav ${request.method} $url redirect=${request.isRedirect} gesture=${request.hasGesture()}")
+                // Ссылки на списки переписок и друзей открываем нативными экранами, а не веб-страницами.
+                if (isLoggedIn != false) {
+                    val section = nativeSectionFor(url)
+                    if (section != null) {
+                        runOnUiThread { showNativeSection(section) }
+                        return true
+                    }
+                }
                 return if (url.host?.endsWith(SITE_HOST) == true) {
                     false // открываем внутри приложения
                 } else {
@@ -210,6 +323,11 @@ class MainActivity : AppCompatActivity() {
             // полной перезагрузки), поэтому состояние кнопки обновляем здесь.
             override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
+                if (url != null && isLoggedIn != false) {
+                    val uri = Uri.parse(url)
+                    // JS-переход сайта на список переписок/друзей (или закрытие веб-диалога) — показываем нативный.
+                    nativeSectionFor(uri)?.let { showNativeSection(it) }
+                }
                 updateAddPostButton(url)
             }
 
@@ -467,23 +585,24 @@ class MainActivity : AppCompatActivity() {
     private fun setupBottomNav() {
         findViewById<ImageButton>(R.id.navMusic).apply {
             setImageBitmap(loadAssetIcon("ui/icons/audios_aero.webp"))
-            setOnClickListener { webView.loadUrl("$SITE_ORIGIN/music/") }
+            setOnClickListener { returnSection = null; showNativeSection(NativeSection.MUSIC) }
         }
         findViewById<ImageButton>(R.id.navCommunities).apply {
             setImageBitmap(loadAssetIcon("ui/icons/communities_aero.webp"))
-            setOnClickListener { webView.loadUrl("$SITE_ORIGIN/communities") }
+            setOnClickListener { returnSection = null; showNativeSection(NativeSection.COMMUNITIES) }
         }
         findViewById<ImageButton>(R.id.navAddPost).apply {
             setImageBitmap(loadAssetIcon("ui/icons/new_post.webp"))
             setOnClickListener { openPostCreator() }
         }
+        navHomeCenter.setOnClickListener { leaveNative(); webView.loadUrl("$SITE_ORIGIN") }
         findViewById<ImageButton>(R.id.navFriends).apply {
             setImageBitmap(loadAssetIcon("ui/icons/friends_aero.webp"))
-            setOnClickListener { webView.loadUrl("$SITE_ORIGIN/friends") }
+            setOnClickListener { returnSection = null; showNativeSection(NativeSection.FRIENDS) }
         }
         findViewById<ImageButton>(R.id.navChats).apply {
             setImageBitmap(loadAssetIcon("ui/icons/chats_aero.webp"))
-            setOnClickListener { webView.loadUrl("$SITE_ORIGIN/chats") }
+            setOnClickListener { returnSection = null; showNativeSection(NativeSection.CHATS) }
         }
     }
 
@@ -500,6 +619,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupTopNav() {
         findViewById<ImageButton>(R.id.navHome).setOnClickListener {
+            leaveNative()
             webView.loadUrl("$SITE_ORIGIN")
         }
         findViewById<ImageView>(R.id.navCoinsIcon).setImageBitmap(loadAssetIcon("ui/icons/cd_coin.png"))
@@ -539,13 +659,49 @@ class MainActivity : AppCompatActivity() {
      */
     private fun updateBarsVisibility() {
         if (paymentWebView != null) return // в платёжном режиме панели уже скрыты
-        val authPage = isPublicPath(webView.url) &&
-            PUBLIC_PATH_PREFIXES.take(3).any { Uri.parse(webView.url).path.orEmpty().trimEnd('/').startsWith(it) }
-        val show = isLoggedIn != false && !authPage
-        val vis = if (show) View.VISIBLE else View.GONE
-        topNavBar.visibility = vis
-        bottomNavBar.visibility = vis
+        val show = barsShouldShow()
+        if (!show) hideNativeSection()
+        bottomNavBar.visibility = if (show) View.VISIBLE else View.GONE
+        applyTopChrome(show)
         if (show) showBottomNav()
+    }
+
+    private fun barsShouldShow(): Boolean {
+        val path = pathOf(currentUrl ?: webView.url)
+        val authPage = isPublicPath(currentUrl ?: webView.url) &&
+            PUBLIC_PATH_PREFIXES.take(3).any { path.startsWith(it) }
+        return isLoggedIn != false && !authPage
+    }
+
+    private fun pathOf(url: String?): String =
+        try { Uri.parse(url ?: "").path.orEmpty().trimEnd('/') } catch (e: Exception) { "" }
+
+    /** Нативная «шапка раздела» (иконка + название) вместо полной верхней панели. */
+    private class SectionChrome(val iconAsset: String, val titleRes: Int)
+
+    private val chatsChrome = SectionChrome("ui/icons/chats_aero.webp", R.string.nav_chats)
+    private val friendsChrome = SectionChrome("ui/icons/friends_aero.webp", R.string.nav_friends)
+    private val communitiesChrome = SectionChrome("ui/icons/communities_aero.webp", R.string.nav_communities)
+    private val musicChrome = SectionChrome("ui/icons/audios_aero.webp", R.string.nav_music)
+
+    private fun activeSectionChrome(): SectionChrome? = when (nativeSection) {
+        NativeSection.CHATS -> chatsChrome
+        NativeSection.FRIENDS -> friendsChrome
+        NativeSection.COMMUNITIES -> communitiesChrome
+        NativeSection.MUSIC -> musicChrome
+        null -> null
+    }
+
+    /** Показывает либо обычную верхнюю панель, либо шапку раздела, либо ничего. */
+    private fun applyTopChrome(barsVisible: Boolean) {
+        val section = if (barsVisible) activeSectionChrome() else null
+        if (section != null) {
+            sectionHeaderIcon.setImageBitmap(loadAssetIcon(section.iconAsset))
+            sectionHeaderTitle.setText(section.titleRes)
+        }
+        sectionHeader.visibility = if (section != null) View.VISIBLE else View.GONE
+        topNavBar.visibility = if (barsVisible && section == null) View.VISIBLE else View.GONE
+        sectionHeaderAction.visibility = if (section != null && nativeSection == NativeSection.MUSIC) View.VISIBLE else View.GONE
     }
 
     /**
@@ -634,6 +790,99 @@ class MainActivity : AppCompatActivity() {
             })();
         """.trimIndent()
         view.evaluateJavascript(js, null)
+    }
+
+    private fun showNativeSection(section: NativeSection) {
+        if (isLoggedIn == false || nativeSection == section) return
+        // Переключение между нативными вкладками: прежнюю останавливаем и прячем.
+        stopNativeControllers()
+        resetNativeSearch(nativeSection)
+        nativeSection = section
+        nativeChatsPanel.visibility = if (section == NativeSection.CHATS) View.VISIBLE else View.GONE
+        nativeFriendsPanel.visibility = if (section == NativeSection.FRIENDS) View.VISIBLE else View.GONE
+        nativeCommunitiesPanel.visibility = if (section == NativeSection.COMMUNITIES) View.VISIBLE else View.GONE
+        nativeMusicPanel.visibility = if (section == NativeSection.MUSIC) View.VISIBLE else View.GONE
+        updateAddPostButton(currentUrl)
+        showBottomNav()
+        startNativeLoading()
+    }
+
+    private fun startNativeLoading() {
+        webView.evaluateJavascript(
+            "(function(){try{return JSON.stringify({u:localStorage.getItem('userId')||'',d:localStorage.getItem('deviceId')||''});}catch(e){return '{}';}})()"
+        ) { raw ->
+            var uid = ""
+            var did = ""
+            try {
+                val o = org.json.JSONObject(unwrapJsString(raw) ?: "{}")
+                uid = o.optString("u", "")
+                did = o.optString("d", "")
+            } catch (e: Exception) {
+                Log.w(TAG, "Не удалось прочитать сессию из WebView", e)
+            }
+            if (isFinishing || isDestroyed) return@evaluateJavascript
+            val ua = webView.settings.userAgentString
+            when (nativeSection) {
+                NativeSection.CHATS -> chatsController.start(uid, did, ua)
+                NativeSection.FRIENDS -> friendsController.start(uid, did, ua)
+                NativeSection.COMMUNITIES -> communitiesController.start(uid, did, ua)
+                NativeSection.MUSIC -> musicController.start(uid, did, ua)
+                null -> {}
+            }
+        }
+    }
+
+    private fun hideNativeSection() {
+        if (nativeSection == null) return
+        val was = nativeSection
+        nativeSection = null
+        nativeChatsPanel.visibility = View.GONE
+        nativeFriendsPanel.visibility = View.GONE
+        nativeCommunitiesPanel.visibility = View.GONE
+        nativeMusicPanel.visibility = View.GONE
+        stopNativeControllers()
+        resetNativeSearch(was)
+        updateAddPostButton(currentUrl)
+    }
+
+    private fun stopNativeControllers() {
+        chatsController.stop()
+        friendsController.stop()
+        communitiesController.stop()
+        musicController.stop()
+    }
+
+    /** Строка поиска очищается при уходе с вкладки (как при новой загрузке страницы на сайте). */
+    private fun resetNativeSearch(section: NativeSection?) {
+        when (section) {
+            NativeSection.FRIENDS -> friendsController.reset()
+            NativeSection.COMMUNITIES -> communitiesController.reset()
+            else -> {}
+        }
+    }
+
+    /** Уход с нативной вкладки на веб-страницу кнопками панели. */
+    private fun leaveNative() {
+        returnSection = null
+        hideNativeSection()
+    }
+
+    /** Нативный экран для адреса: /chats и /friends без параметров (с chatId/id — веб, как раньше). */
+    private fun nativeSectionFor(uri: Uri): NativeSection? {
+        if (uri.host?.endsWith(SITE_HOST) != true) return null
+        val path = uri.path.orEmpty().trimEnd('/')
+        if (path == "/music") {
+            // Своя библиотека (без id или с собственным id) — нативный плеер; чужая — веб-страница.
+            val id = uri.getQueryParameter("id")
+            return if (id == null || (id.isNotEmpty() && id == siteApi.userId)) NativeSection.MUSIC else null
+        }
+        if (uri.getQueryParameter("chatId") != null || uri.getQueryParameter("id") != null) return null
+        return when (path) {
+            "/chats" -> NativeSection.CHATS
+            "/friends" -> NativeSection.FRIENDS
+            "/communities" -> NativeSection.COMMUNITIES
+            else -> null
+        }
     }
 
     private fun openLoginPage() {
@@ -922,6 +1171,7 @@ class MainActivity : AppCompatActivity() {
         paymentProgress = payProgress
         // В платёжном режиме прячем обе нативные панели и отключаем pull-to-refresh.
         topNavBar.visibility = View.GONE
+        sectionHeader.visibility = View.GONE
         bottomNavBar.visibility = View.GONE
         swipeRefresh.isEnabled = false
         swipeRefresh.visibility = View.GONE
@@ -1063,13 +1313,19 @@ class MainActivity : AppCompatActivity() {
     private val NO_POST_PATH_PREFIXES = listOf("/music", "/communities", "/friends", "/chats")
 
     private fun updateAddPostButton(url: String?) {
-        val path = try { Uri.parse(url).path.orEmpty().trimEnd('/') } catch (e: Exception) { "" }
-        val noPost = NO_POST_PATH_PREFIXES.any { path == it || path.startsWith("$it/") }
+        currentUrl = url
+        val path = pathOf(url)
+        val noPost = nativeSection != null || NO_POST_PATH_PREFIXES.any { path == it || path.startsWith("$it/") }
         // INVISIBLE (а не GONE) сохраняет ширину кнопки — это и есть пустое место по центру.
         findViewById<View>(R.id.navAddPost).visibility = if (noPost) View.INVISIBLE else View.VISIBLE
         val dividerVis = if (noPost) View.VISIBLE else View.GONE
         findViewById<View>(R.id.navGapDividerLeft).visibility = dividerVis
         findViewById<View>(R.id.navGapDividerRight).visibility = dividerVis
+        // В разделах с нативной шапкой «Домой» занимает место кнопки поста
+        // (шапка заменяет верхнюю панель, где раньше была кнопка «Домой»).
+        val hasSectionChrome = activeSectionChrome() != null
+        navHomeCenter.visibility = if (hasSectionChrome) View.VISIBLE else View.GONE
+        if (paymentWebView == null) applyTopChrome(barsShouldShow())
     }
 
     private fun hideBottomNav() {
@@ -1485,6 +1741,18 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
+        if (nativeSection != null) {
+            hideNativeSection()
+            // Под списком может лежать веб-версия /chats или /friends — тогда идём назад по истории.
+            if (pathOf(webView.url) !in setOf("/chats", "/friends", "/communities", "/music")) return
+        } else if (returnSection != null && pathOf(webView.url) in setOf("/profile", "/community", "/new_community")) {
+            // Профиль/порт открыли из нативного списка — «Назад» возвращает в него.
+            val back = returnSection!!
+            returnSection = null
+            if (webView.canGoBack()) webView.goBack()
+            showNativeSection(back)
+            return
+        }
         handleHistoryBack()
     }
 
@@ -1521,8 +1789,14 @@ class MainActivity : AppCompatActivity() {
         // После нативного чата обновляем список переписок (последнее сообщение, счётчики).
         if (reloadChatsOnResume) {
             reloadChatsOnResume = false
-            webView.reload()
+            if (nativeSection != NativeSection.CHATS) webView.reload()
         }
+        if (nativeSection != null) startNativeLoading()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopNativeControllers()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -1541,6 +1815,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        chatsController.destroy()
+        friendsController.destroy()
+        communitiesController.destroy()
+        musicController.destroy()
+        siteApi.destroy()
         paymentWebView?.let { it.stopLoading(); it.destroy() }
         paymentWebView = null
         webView.destroy()
