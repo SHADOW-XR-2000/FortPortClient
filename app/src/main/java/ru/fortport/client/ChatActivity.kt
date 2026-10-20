@@ -78,7 +78,6 @@ class ChatActivity : AppCompatActivity() {
         private const val TAG = "ChatActivity"
         private const val SITE_ORIGIN = "https://fortport.ru"
         private const val SITE_HOST = "fortport.ru"
-        private val AUTH_RETRY_DELAYS_MS = SiteApi.AUTH_RETRY_DELAYS_MS
         private const val PAGE_SIZE = 60
         private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
     }
@@ -263,17 +262,7 @@ class ChatActivity : AppCompatActivity() {
     private class Resp(val code: Int, val body: String)
 
     private fun call(req: Request, c: OkHttpClient = client): Resp {
-        // 401/403 на плохой сети могут быть временными (куки обновились/потерялся Set-Cookie) —
-        // перед тем как считать сессию потерянной, повторяем с паузами.
-        var attempt = 0
-        while (true) {
-            val resp = c.newCall(req).execute().use { r -> Resp(r.code, r.body?.string().orEmpty()) }
-            if ((resp.code == 401 || resp.code == 403) && attempt < AUTH_RETRY_DELAYS_MS.size) {
-                Thread.sleep(AUTH_RETRY_DELAYS_MS[attempt++])
-                continue
-            }
-            return resp
-        }
+        c.newCall(req).execute().use { r -> return Resp(r.code, r.body?.string().orEmpty()) }
     }
 
     private fun get(path: String) = call(Request.Builder().url(SITE_ORIGIN + path).get().build())
@@ -451,7 +440,6 @@ class ChatActivity : AppCompatActivity() {
     private fun startPolling() {
         pollThread.execute {
             var failures = 0
-            var authFailures = 0
             while (active) {
                 try {
                     val call = pollClient.newCall(
@@ -459,13 +447,7 @@ class ChatActivity : AppCompatActivity() {
                     )
                     pollCall = call
                     call.execute().use { r ->
-                        if (r.code == 401 || r.code == 403) {
-                            // Один 401 в long-poll не повод закрывать чат: сначала несколько повторов.
-                            authFailures++
-                            if (authFailures >= 4) { onAuthLost(); active = false; return@use }
-                            throw IOException("HTTP ${r.code}")
-                        }
-                        authFailures = 0
+                        if (r.code == 401 || r.code == 403) { onAuthLost(); active = false; return@use }
                         if (r.code == 204) { failures = 0; return@use }
                         if (r.code !in 200..299) throw IOException("HTTP ${r.code}")
                         failures = 0
