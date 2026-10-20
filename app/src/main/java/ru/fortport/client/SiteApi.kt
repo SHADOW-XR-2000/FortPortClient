@@ -168,6 +168,18 @@ class SiteApi(private val activity: AppCompatActivity) {
         }
     }
 
+    /** Свой фон страницы (пользовательский или стандартный) — чтобы вернуть его после чужого. */
+    fun ownBackgroundBitmap(): Bitmap? = customBackground ?: defaultBackground
+
+    fun defaultBackgroundBitmap(): Bitmap? = defaultBackground
+
+    /** Скачивает картинку по пути сайта (из io-потока); null — не удалось. */
+    fun downloadBitmap(path: String, maxSide: Int): Bitmap? = try {
+        client.newCall(Request.Builder().url(absUrl(path)).get().build()).execute().use { r ->
+            if (!r.isSuccessful) null else r.body?.bytes()?.let { decodeSampled(it, maxSide) }
+        }
+    } catch (e: Exception) { null }
+
     private fun setCustomBackground(bmp: Bitmap?) {
         activity.runOnUiThread {
             if (activity.isDestroyed) return@runOnUiThread
