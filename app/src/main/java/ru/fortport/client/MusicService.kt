@@ -161,6 +161,7 @@ class MusicService : Service(), PlaybackCore.Listener {
                 else action(R.drawable.ic_notif_play, "Воспроизвести", servicePi(ACTION_PLAY_PAUSE, 2))
             )
             .addAction(action(R.drawable.ic_notif_next, "Вперёд", servicePi(ACTION_NEXT, 3)))
+            .addAction(action(R.drawable.ic_notif_close, "Выключить", servicePi(ACTION_STOP, 4)))
             .setStyle(style)
             .build()
     }
