@@ -31,13 +31,6 @@ class SiteApi(private val activity: AppCompatActivity) {
         const val ORIGIN = "https://fortport.ru"
         const val HOST = "fortport.ru"
         private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
-
-        /**
-         * 401/403 на плохой сети — не всегда «сессия умерла»: куки могла обновить WebView
-         * параллельно, а ответ с Set-Cookie мог потеряться по таймауту. Перед тем как
-         * признать сессию потерянной, повторяем запрос с паузами (куки читаются заново).
-         */
-        val AUTH_RETRY_DELAYS_MS = longArrayOf(800L, 2500L)
     }
 
     class Resp(val code: Int, val body: String)
@@ -88,15 +81,7 @@ class SiteApi(private val activity: AppCompatActivity) {
             else -> ByteArray(0).toRequestBody(null)
         }
         val req = Request.Builder().url(ORIGIN + path).method(method, body).build()
-        var attempt = 0
-        while (true) {
-            val resp = client.newCall(req).execute().use { Resp(it.code, it.body?.string().orEmpty()) }
-            if ((resp.code == 401 || resp.code == 403) && attempt < AUTH_RETRY_DELAYS_MS.size) {
-                Thread.sleep(AUTH_RETRY_DELAYS_MS[attempt++]) // вызывается только из io-потоков
-                continue
-            }
-            return resp
-        }
+        client.newCall(req).execute().use { return Resp(it.code, it.body?.string().orEmpty()) }
     }
 
     /** 0 — id известен, 1 — нет авторизации, 2 — ошибка сети/сервера. */
@@ -111,6 +96,22 @@ class SiteApi(private val activity: AppCompatActivity) {
         if (id <= 0) return 2
         userId = id.toString()
         return 0
+    }
+
+    /**
+     * Подтверждает потерю сессии отдельным запросом.
+     * Сетевые ошибки и ответы 5xx трактуются как неизвестное состояние,
+     * а не как выход пользователя.
+     */
+    fun confirmSessionInvalid(): Boolean = try {
+        val r = get("/api/session/bootstrap")
+        when {
+            r.code == 401 || r.code == 403 -> true
+            r.code != 200 -> false
+            else -> !JSONObject(r.body).optBoolean("authenticated", false)
+        }
+    } catch (_: Exception) {
+        false
     }
 
     fun absUrl(path: String): String = when {
