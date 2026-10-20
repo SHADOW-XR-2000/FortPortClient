@@ -67,7 +67,8 @@ class MusicController(
     private val api: SiteApi,
     private val swipe: SwipeRefreshLayout,
     private val recycler: RecyclerView,
-    private val emptyView: View,
+    private val emptyView: TextView,
+    private val bg: ImageView,
     private val disc: ImageView,
     private val titleView: TextView,
     private val artistView: TextView,
@@ -79,47 +80,37 @@ class MusicController(
     private val btnPlay: ImageButton,
     private val btnNext: ImageButton,
     private val btnRepeat: ImageButton,
+    private val onLibraryChanged: () -> Unit,
     private val onAuthLost: () -> Unit
-) {
+) : PlaybackCore.Listener {
     companion object {
         private const val TAG = "Music"
         private const val TICK_MS = 250L
         private const val INACTIVE_ALPHA = 0.45f
+        private const val REQUEST_NOTIFICATIONS = 4712
     }
-
-    private class Audio(
-        val id: Long,
-        val path: String,
-        val name: String,
-        val artist: String,
-        val genre: String,
-        val uploadedBy: Long
-    )
 
     private val ui = Handler(Looper.getMainLooper())
     private val transfers = Executors.newSingleThreadExecutor()
+    private val core = PlaybackCore
 
-    private var audios: List<Audio> = emptyList()
-    private var queue: List<Audio> = emptyList()
-    private var current: Audio? = null
+    private var audios: List<MusicTrack> = emptyList()
 
-    private var shuffleOn = false
-    private var repeatOn = false
+    /** Чья библиотека открыта: null — своя. */
+    var viewedUserId: String? = null; private set
+    var viewedName: String = ""; private set
+    private var bioDone = false
+    private var askedNotifications = false
 
-    private var player: MediaPlayer? = null
-    private var prepared = false
-    private var wantPlay = false
+    /** Своя ли библиотека (id совпадает с id пользователя). */
+    val isOwnLibrary: Boolean get() = viewedUserId == null || viewedUserId == api.userId
+    private fun ownerKey(): String = viewedUserId ?: api.userId
 
     private var started = false      // вкладка на экране
     private var loadedOnce = false
     private var bgCheckPending = false
     private var generation = 0
     private var destroyed = false
-
-    private val audioManager = activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private var focusRequest: AudioFocusRequest? = null
-    private var resumeAfterFocus = false
-    private var noisyRegistered = false
 
     private val discAnim = ObjectAnimator.ofFloat(disc, View.ROTATION, 0f, 360f).apply {
         duration = 4000L
@@ -136,23 +127,18 @@ class MusicController(
     private val tick = object : Runnable {
         override fun run() {
             updateProgress()
-            if (started && player?.isPlaying == true) ui.postDelayed(this, TICK_MS)
-        }
-    }
-
-    private val noisyReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) pausePlayback()
+            if (started && core.wantPlay && core.prepared) ui.postDelayed(this, TICK_MS)
         }
     }
 
     init {
+        core.init(activity)
         recycler.layoutManager = LinearLayoutManager(activity)
         recycler.adapter = adapter
         recycler.itemAnimator = null
         val d = activity.resources.displayMetrics.density
         // Список начинается под плашкой плеера — индикатор обновления рисуем под ней.
-        swipe.setProgressViewOffset(false, (252 * d).toInt(), (314 * d).toInt())
+        swipe.setProgressViewOffset(false, (260 * d).toInt(), (322 * d).toInt())
         swipe.setColorSchemeResources(R.color.fp_accent)
         swipe.setDistanceToTriggerSync((32 * d).toInt())
         swipe.setSize(SwipeRefreshLayout.LARGE)
@@ -166,40 +152,57 @@ class MusicController(
             if (bmp != null) activity.runOnUiThread { if (!destroyed) disc.setImageBitmap(bmp) }
         }
 
-        titleView.text = "Нет аудио"
-        artistView.text = "—"
         seek.listener = object : GradientSeekBar.Listener {
             override fun onScrub(fraction: Float) {
-                val dur = player?.takeIf { prepared }?.duration ?: return
-                timeCurrent.text = fmt((fraction * dur).toInt())
+                val dur = core.duration()
+                if (dur > 0) timeCurrent.text = fmt((fraction * dur).toInt())
             }
 
             override fun onSeekFinished(fraction: Float) {
-                val p = player?.takeIf { prepared } ?: return
-                p.seekTo((fraction * p.duration).toInt())
+                val dur = core.duration()
+                if (dur > 0) core.seekTo((fraction * dur).toInt())
                 updateProgress()
             }
         }
-        btnPlay.setOnClickListener { togglePlay() }
-        btnNext.setOnClickListener { playNext() }
-        btnPrev.setOnClickListener { playPrevious() }
-        btnShuffle.setOnClickListener { toggleShuffle() }
-        btnRepeat.setOnClickListener { repeatOn = !repeatOn; updateButtons() }
-        updateButtons()
+        btnPlay.setOnClickListener { onPlayClicked() }
+        btnNext.setOnClickListener { core.next() }
+        btnPrev.setOnClickListener { core.previous() }
+        btnShuffle.setOnClickListener { core.toggleShuffle() }
+        btnRepeat.setOnClickListener { core.toggleRepeat() }
+        core.addListener(this)
+        syncFromCore()
+    }
+
+    // ------------------------------------------------------------------ чья библиотека
+
+    /** null — своя. Возвращает true, если открытая библиотека сменилась. */
+    fun setViewedUser(id: String?): Boolean {
+        val n = id?.takeIf { it.isNotBlank() }
+        if (n == viewedUserId) return false
+        viewedUserId = n
+        viewedName = ""
+        bioDone = false
+        loadedOnce = false
+        generation++
+        audios = emptyList()
+        emptyView.visibility = View.GONE
+        adapter.notifyDataSetChanged()
+        swipe.isRefreshing = false
+        if (n == null) bg.setImageBitmap(api.ownBackgroundBitmap())
+        return true
     }
 
     // ------------------------------------------------------------------ жизненный цикл
 
     fun start(userId: String, deviceId: String, userAgent: String) {
         api.setSession(userId, deviceId, userAgent)
+        core.configure(userAgent, deviceId)
         destroyed = false
         if (!started) {
             started = true
             bgCheckPending = true
             if (!loadedOnce) swipe.isRefreshing = true
-            syncDisc()
-            ui.removeCallbacks(tick)
-            ui.post(tick)
+            syncFromCore()
         }
         load(silent = true)
     }
@@ -216,16 +219,14 @@ class MusicController(
     fun destroy() {
         stop()
         destroyed = true
-        wantPlay = false
-        releasePlayer()
-        abandonFocus()
-        unregisterNoisy()
+        core.removeListener(this)
         discAnim.cancel()
         transfers.shutdownNow()
     }
 
-    /** Кнопка «загрузить аудио с устройства» в шапке раздела. */
+    /** Кнопка «загрузить аудио с устройства» в шапке раздела (только в своей библиотеке). */
     fun pickFromDevice() {
+        if (!isOwnLibrary) return
         try {
             pickAudio.launch("audio/*")
         } catch (e: Exception) {
@@ -238,16 +239,21 @@ class MusicController(
 
     private fun load(silent: Boolean) {
         val gen = ++generation
+        val viewed = viewedUserId
         api.io.execute {
             var ok = false
             var auth = false
-            var list: List<Audio> = emptyList()
+            var list: List<MusicTrack> = emptyList()
+            var name: String? = null
+            var otherBg: android.graphics.Bitmap? = null
+            var bioLoaded = false
             try {
                 when (api.ensureUserId()) {
                     1 -> auth = true
                     2 -> {}
                     else -> {
-                        val r = api.get("/api/users/audios?userId=${api.userId}")
+                        val target = viewed ?: api.userId
+                        val r = api.get("/api/users/audios?userId=$target")
                         if (r.code == 401 || r.code == 403) auth = true
                         else if (r.code == 200) {
                             list = parse(JSONObject(r.body).optJSONArray("audios"))
@@ -258,16 +264,42 @@ class MusicController(
             } catch (e: Exception) {
                 Log.w(TAG, "Не удалось загрузить аудио", e)
             }
-            if (ok && bgCheckPending) {
-                bgCheckPending = false
-                try { api.refreshBackground() } catch (e: Exception) { Log.w(TAG, "Не удалось обновить фон", e) }
+            if (ok) {
+                val own = viewed == null || viewed == api.userId
+                if (own) {
+                    if (bgCheckPending) {
+                        bgCheckPending = false
+                        try { api.refreshBackground() } catch (e: Exception) { Log.w(TAG, "Не удалось обновить фон", e) }
+                    }
+                } else if (!bioDone) {
+                    // Чужая библиотека: имя и фон хозяина страницы, как на сайте.
+                    try {
+                        val r = api.get("/api/users/bio/$viewed")
+                        if (r.code == 200) {
+                            val o = JSONObject(r.body)
+                            name = api.str(o, "username")
+                            val bgPath = api.str(o, "profileBackground")
+                            if (bgPath.isNotBlank()) otherBg = api.downloadBitmap(bgPath, 1600)
+                            bioLoaded = true
+                        }
+                    } catch (e: Exception) { Log.w(TAG, "Не удалось загрузить профиль владельца", e) }
+                }
             }
             activity.runOnUiThread {
                 if (activity.isFinishing || activity.isDestroyed || gen != generation || !started) return@runOnUiThread
                 swipe.isRefreshing = false
                 when {
                     auth -> onAuthLost()
-                    ok -> { loadedOnce = true; applyList(list) }
+                    ok -> {
+                        loadedOnce = true
+                        if (bioLoaded) {
+                            bioDone = true
+                            viewedName = name.orEmpty()
+                            bg.setImageBitmap(otherBg ?: api.defaultBackgroundBitmap())
+                        }
+                        applyList(list)
+                        onLibraryChanged()
+                    }
                     !silent && !loadedOnce -> Toast.makeText(activity, "Не удалось загрузить музыку", Toast.LENGTH_SHORT).show()
                     !silent -> Toast.makeText(activity, "Не удалось обновить список", Toast.LENGTH_SHORT).show()
                 }
@@ -275,303 +307,83 @@ class MusicController(
         }
     }
 
-    private fun parse(arr: JSONArray?): List<Audio> {
+    private fun parse(arr: JSONArray?): List<MusicTrack> {
         if (arr == null) return emptyList()
         return (0 until arr.length()).mapNotNull { i ->
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
             val id = o.optLong("id", 0L)
             val path = api.str(o, "file_path")
             if (id <= 0 || path.isBlank()) return@mapNotNull null
-            Audio(
+            MusicTrack(
                 id = id,
                 path = path,
                 name = api.str(o, "name").ifBlank { "Без названия" },
                 artist = api.str(o, "artist_name").ifBlank { "Неизвестно" },
                 genre = api.str(o, "genre"),
-                uploadedBy = o.optLong("uploaded_by", 0L)
+                uploadedBy = o.optLong("uploaded_by", 0L),
+                inLibrary = if (o.has("in_library") && !o.isNull("in_library")) o.optInt("in_library", 0) != 0 else isOwnLibrary
             )
         }
     }
 
-    private fun applyList(list: List<Audio>) {
+    private fun applyList(list: List<MusicTrack>) {
         audios = list
-        val cur = current
-        if (cur != null) {
-            val fresh = list.firstOrNull { it.id == cur.id }
-            if (fresh == null) {
-                stopAndClear()
-            } else {
-                current = fresh
-                titleView.text = fresh.name
-                artistView.text = fresh.artist
-            }
-        }
-        if (shuffleOn) rebuildQueue()
+        core.updateLibrary(ownerKey(), list)
+        emptyView.text = if (isOwnLibrary) "В библиотеке пока нет аудио.\nНажмите кнопку загрузки вверху справа"
+        else "В этой библиотеке пока нет аудио"
         emptyView.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
         adapter.notifyDataSetChanged()
     }
 
-    // ------------------------------------------------------------------ порядок воспроизведения
-
-    private fun order(): List<Audio> = if (shuffleOn) queue else audios
-
-    private fun posOf(): Int {
-        val c = current ?: return -1
-        return order().indexOfFirst { it.id == c.id }
-    }
-
-    /** Текущий трек первым, остальные в случайном порядке (как на сайте). */
-    private fun rebuildQueue() {
-        val c = current
-        queue = if (c != null && audios.any { it.id == c.id }) {
-            listOf(audios.first { it.id == c.id }) + audios.filter { it.id != c.id }.shuffled()
-        } else audios.shuffled()
-    }
-
-    private fun toggleShuffle() {
-        shuffleOn = !shuffleOn
-        if (shuffleOn) rebuildQueue() else queue = emptyList()
-        updateButtons()
-    }
-
-    private fun playNext() {
-        val o = order()
-        val n = posOf() + 1
-        if (n in o.indices) startTrack(o[n])
-    }
-
-    private fun playPrevious() {
-        val p = player
-        if (p != null && prepared && p.currentPosition > 3000) {
-            p.seekTo(0)
-            updateProgress()
-            return
-        }
-        val n = posOf() - 1
-        if (n >= 0) startTrack(order()[n])
-    }
-
-    private fun onRowClicked(a: Audio) {
-        if (current?.id == a.id && player != null) { togglePlay(); return }
-        current = a
-        if (shuffleOn) rebuildQueue()
-        startTrack(a)
-    }
-
-    private fun togglePlay() {
-        if (current == null) {
-            if (shuffleOn) rebuildQueue()
-            order().firstOrNull()?.let { startTrack(it) }
-            return
-        }
-        if (wantPlay) pausePlayback() else resumePlayback()
-    }
-
     // ------------------------------------------------------------------ плеер
 
-    private fun startTrack(a: Audio) {
-        releasePlayer()
-        current = a
-        wantPlay = true
-        prepared = false
-        titleView.text = a.name
-        artistView.text = a.artist
-        seek.seekEnabled = false
-        seek.progress = 0f
-        timeCurrent.text = fmt(0)
-        timeTotal.text = fmt(0)
-        val mp = MediaPlayer()
-        player = mp
-        try {
-            mp.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
+    private fun onPlayClicked() {
+        if (core.current == null) {
+            askNotificationPermission()
+            core.playFirst(ownerKey(), audios)
+        } else core.togglePlay()
+    }
+
+    private fun onRowClicked(a: MusicTrack) {
+        if (core.current?.id == a.id) { core.togglePlay(); return }
+        askNotificationPermission()
+        core.play(a, ownerKey(), audios)
+    }
+
+    /** Android 13+: без этого разрешения уведомление с кнопками плеера не покажется. */
+    private fun askNotificationPermission() {
+        if (askedNotifications || Build.VERSION.SDK_INT < 33) return
+        askedNotifications = true
+        if (activity.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            androidx.core.app.ActivityCompat.requestPermissions(
+                activity, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS
             )
-            mp.setWakeMode(activity.applicationContext, PowerManager.PARTIAL_WAKE_LOCK)
-            val headers = HashMap<String, String>()
-            if (api.userAgent.isNotBlank()) headers["User-Agent"] = api.userAgent
-            if (api.deviceId.isNotBlank()) headers["X-Device-Id"] = api.deviceId
-            android.webkit.CookieManager.getInstance().getCookie(SiteApi.ORIGIN)?.let { headers["Cookie"] = it }
-            mp.setDataSource(activity.applicationContext, Uri.parse(api.absUrl(a.path.replace(" ", "%20"))), headers)
-            mp.setOnPreparedListener {
-                if (player !== mp) return@setOnPreparedListener
-                prepared = true
-                seek.seekEnabled = true
-                timeTotal.text = fmt(mp.duration)
-                if (wantPlay && requestFocus()) {
-                    mp.start()
-                    registerNoisy()
-                    ui.removeCallbacks(tick)
-                    ui.post(tick)
-                } else wantPlay = false
-                refreshUi()
-            }
-            mp.setOnCompletionListener {
-                if (player !== mp) return@setOnCompletionListener
-                onCompleted(mp)
-            }
-            mp.setOnErrorListener { _, what, extra ->
-                if (player === mp) {
-                    Log.w(TAG, "Ошибка плеера what=$what extra=$extra")
-                    Toast.makeText(activity, "Не удалось воспроизвести трек", Toast.LENGTH_SHORT).show()
-                    wantPlay = false
-                    prepared = false
-                    seek.seekEnabled = false
-                    refreshUi()
-                }
-                true
-            }
-            mp.prepareAsync()
-        } catch (e: Exception) {
-            Log.w(TAG, "Не удалось запустить трек", e)
-            Toast.makeText(activity, "Не удалось воспроизвести трек", Toast.LENGTH_SHORT).show()
-            wantPlay = false
-        }
-        refreshUi()
-    }
-
-    private fun onCompleted(mp: MediaPlayer) {
-        if (repeatOn) {
-            mp.seekTo(0)
-            mp.start()
-            return
-        }
-        val o = order()
-        val n = posOf() + 1
-        if (n in o.indices) {
-            startTrack(o[n])
-        } else {
-            // Конец списка: останавливаемся на начале трека.
-            wantPlay = false
-            seek.progress = 0f
-            timeCurrent.text = fmt(0)
-            abandonFocus()
-            unregisterNoisy()
-            refreshUi()
         }
     }
 
-    private fun resumePlayback() {
-        val p = player
-        if (p == null || !prepared) {
-            current?.let { startTrack(it) }
-            return
-        }
-        if (!requestFocus()) return
-        wantPlay = true
-        p.start()
-        registerNoisy()
-        ui.removeCallbacks(tick)
-        ui.post(tick)
-        refreshUi()
-    }
+    override fun onPlaybackChanged() { syncFromCore() }
 
-    private fun pausePlayback() {
-        wantPlay = false
-        resumeAfterFocus = false
-        try { player?.takeIf { prepared && it.isPlaying }?.pause() } catch (e: IllegalStateException) { /* уже остановлен */ }
-        unregisterNoisy()
-        refreshUi()
-    }
-
-    private fun stopAndClear() {
-        wantPlay = false
-        releasePlayer()
-        abandonFocus()
-        unregisterNoisy()
-        current = null
-        titleView.text = "Нет аудио"
-        artistView.text = "—"
-        seek.seekEnabled = false
-        seek.progress = 0f
-        timeCurrent.text = fmt(0)
-        timeTotal.text = fmt(0)
-        refreshUi()
-    }
-
-    private fun releasePlayer() {
-        val p = player
-        player = null
-        prepared = false
-        if (p != null) {
-            try { p.setOnPreparedListener(null); p.setOnCompletionListener(null); p.setOnErrorListener(null) } catch (e: Exception) {}
-            try { p.release() } catch (e: Exception) {}
-        }
-    }
-
-    // ------------------------------------------------------------------ аудиофокус
-
-    private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
-        when (change) {
-            AudioManager.AUDIOFOCUS_LOSS -> pausePlayback()
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                if (wantPlay) {
-                    val keep = true
-                    pausePlayback()
-                    resumeAfterFocus = keep
-                }
-            }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> player?.setVolume(0.3f, 0.3f)
-            AudioManager.AUDIOFOCUS_GAIN -> {
-                player?.setVolume(1f, 1f)
-                if (resumeAfterFocus) { resumeAfterFocus = false; resumePlayback() }
-            }
-        }
-    }
-
-    private fun requestFocus(): Boolean {
-        val req = focusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
-            .setOnAudioFocusChangeListener(focusListener)
-            .build().also { focusRequest = it }
-        return audioManager.requestAudioFocus(req) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-    }
-
-    private fun abandonFocus() {
-        focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
-    }
-
-    private fun registerNoisy() {
-        if (noisyRegistered) return
-        try {
-            activity.registerReceiver(noisyReceiver, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
-            noisyRegistered = true
-        } catch (e: Exception) { Log.w(TAG, "noisy receiver", e) }
-    }
-
-    private fun unregisterNoisy() {
-        if (!noisyRegistered) return
-        try { activity.unregisterReceiver(noisyReceiver) } catch (e: Exception) {}
-        noisyRegistered = false
-    }
-
-    // ------------------------------------------------------------------ интерфейс плеера
-
-    private fun refreshUi() {
-        btnPlay.setImageResource(if (wantPlay) R.drawable.audio_pause else R.drawable.audio_play)
-        btnPlay.contentDescription = if (wantPlay) "Пауза" else "Воспроизведение"
+    private fun syncFromCore() {
+        val c = core.current
+        titleView.text = c?.name ?: "Нет аудио"
+        artistView.text = c?.artist ?: "—"
+        seek.seekEnabled = core.prepared
+        timeTotal.text = fmt(core.duration())
+        if (c == null) { seek.progress = 0f; timeCurrent.text = fmt(0) } else updateProgress()
+        btnPlay.setImageResource(if (core.wantPlay) R.drawable.audio_pause else R.drawable.audio_play)
+        btnPlay.contentDescription = if (core.wantPlay) "Пауза" else "Воспроизведение"
+        btnShuffle.alpha = if (core.shuffleOn) 1f else INACTIVE_ALPHA
+        btnRepeat.alpha = if (core.repeatOn) 1f else INACTIVE_ALPHA
         syncDisc()
-        updateButtons()
+        ui.removeCallbacks(tick)
+        if (started && core.wantPlay && core.prepared) ui.post(tick)
         adapter.notifyDataSetChanged()
-    }
-
-    private fun updateButtons() {
-        btnShuffle.alpha = if (shuffleOn) 1f else INACTIVE_ALPHA
-        btnRepeat.alpha = if (repeatOn) 1f else INACTIVE_ALPHA
-        btnShuffle.isSelected = shuffleOn
-        btnRepeat.isSelected = repeatOn
     }
 
     /** Диск вращается, пока играет музыка и вкладка на экране (как spinDisc на сайте). */
     private fun syncDisc() {
-        val spin = wantPlay && started
+        val spin = core.wantPlay && started
         if (spin) {
             if (!discAnim.isStarted) discAnim.start()
             else if (discAnim.isPaused) discAnim.resume()
@@ -581,14 +393,11 @@ class MusicController(
     }
 
     private fun updateProgress() {
-        val p = player ?: return
-        if (!prepared || seek.isDragging) return
-        try {
-            val dur = p.duration
-            val pos = p.currentPosition
-            if (dur > 0) seek.progress = pos.toFloat() / dur
-            timeCurrent.text = fmt(pos)
-        } catch (e: IllegalStateException) { /* плеер освобождён */ }
+        if (seek.isDragging) return
+        val dur = core.duration()
+        val pos = core.position()
+        if (dur > 0) seek.progress = pos.toFloat() / dur
+        timeCurrent.text = fmt(pos)
     }
 
     private fun fmt(ms: Int): String {
@@ -596,38 +405,43 @@ class MusicController(
         val h = s / 3600
         val m = (s % 3600) / 60
         val sec = s % 60
-        return if (h > 0) String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, sec) else String.format(java.util.Locale.US, "%d:%02d", m, sec)
+        return if (h > 0) String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, sec)
+        else String.format(java.util.Locale.US, "%d:%02d", m, sec)
     }
 
     // ------------------------------------------------------------------ действия над треком
 
-    private fun showMenu(anchor: View, a: Audio) {
-        val own = a.uploadedBy.toString() == api.userId
+    private fun showMenu(anchor: View, a: MusicTrack) {
+        val mine = a.uploadedBy.toString() == api.userId
         val pm = PopupMenu(activity, anchor)
         pm.menu.add(0, 1, 0, "Скачать")
-        if (own) pm.menu.add(0, 2, 1, "Редактировать")
-        pm.menu.add(0, 3, 2, "Удалить")
+        // Как на сайте: править можно только свой трек в своей библиотеке; в чужой — добавить/убрать у себя.
+        if (mine && isOwnLibrary) pm.menu.add(0, 2, 1, "Редактировать")
+        if (isOwnLibrary) pm.menu.add(0, 3, 2, "Удалить")
+        else if (a.inLibrary) pm.menu.add(0, 3, 2, "Убрать из моей библиотеки")
+        else pm.menu.add(0, 4, 2, "Добавить в мою библиотеку")
         pm.setOnMenuItemClickListener {
             when (it.itemId) {
                 1 -> download(a)
                 2 -> showEditDialog(a)
                 3 -> confirmDelete(a)
+                4 -> addToLibrary(a)
             }
             true
         }
         pm.show()
     }
 
-    private fun confirmDelete(a: Audio) {
+    private fun confirmDelete(a: MusicTrack) {
         AlertDialog.Builder(activity)
-            .setTitle("Удалить трек?")
-            .setMessage("«${a.name}» будет удалён из вашей библиотеки.")
-            .setPositiveButton("Удалить") { _, _ -> deleteTrack(a) }
+            .setTitle(if (isOwnLibrary) "Удалить трек?" else "Убрать трек?")
+            .setMessage(if (isOwnLibrary) "«${a.name}» будет удалён из вашей библиотеки." else "«${a.name}» будет убран из вашей библиотеки.")
+            .setPositiveButton(if (isOwnLibrary) "Удалить" else "Убрать") { _, _ -> deleteTrack(a) }
             .setNegativeButton("Отмена", null)
             .show()
     }
 
-    private fun deleteTrack(a: Audio) {
+    private fun deleteTrack(a: MusicTrack) {
         api.io.execute {
             val ok = try { api.send("DELETE", "/api/users/audios/${a.id}", null).code in 200..299 } catch (e: Exception) { false }
             activity.runOnUiThread {
@@ -636,14 +450,27 @@ class MusicController(
                     Toast.makeText(activity, "Не удалось удалить трек", Toast.LENGTH_SHORT).show()
                     return@runOnUiThread
                 }
-                if (current?.id == a.id) stopAndClear()
-                applyList(audios.filter { it.id != a.id })
+                if (isOwnLibrary) {
+                    core.onTrackRemoved(a.id)
+                    applyList(audios.filter { it.id != a.id })
+                }
                 load(silent = true)
             }
         }
     }
 
-    private fun showEditDialog(a: Audio) {
+    private fun addToLibrary(a: MusicTrack) {
+        api.io.execute {
+            val ok = try { api.send("POST", "/api/users/audios/${a.id}", null).code in 200..299 } catch (e: Exception) { false }
+            activity.runOnUiThread {
+                if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                Toast.makeText(activity, if (ok) "Добавлено в вашу библиотеку" else "Не удалось добавить трек", Toast.LENGTH_SHORT).show()
+                if (ok) load(silent = true)
+            }
+        }
+    }
+
+    private fun showEditDialog(a: MusicTrack) {
         val d = activity.resources.displayMetrics.density
         fun field(hint: String, value: String) = EditText(activity).apply {
             this.hint = hint
@@ -679,7 +506,7 @@ class MusicController(
             }.show()
     }
 
-    private fun saveMeta(a: Audio, name: String, artist: String, genre: String) {
+    private fun saveMeta(a: MusicTrack, name: String, artist: String, genre: String) {
         api.io.execute {
             var error: String? = "Не удалось сохранить"
             try {
@@ -701,7 +528,7 @@ class MusicController(
 
     // ------------------------------------------------------------------ скачивание
 
-    private fun download(a: Audio) {
+    private fun download(a: MusicTrack) {
         Toast.makeText(activity, "Скачивание…", Toast.LENGTH_SHORT).show()
         transfers.execute {
             var result: String? = null
@@ -867,12 +694,12 @@ class MusicController(
         private val artist = v.findViewById<TextView>(R.id.audioArtist)
         private val menu = v.findViewById<TextView>(R.id.audioMenu)
 
-        fun bind(a: Audio, position: Int) {
+        fun bind(a: MusicTrack, position: Int) {
             index.text = (position + 1).toString()
             name.text = a.name
             artist.text = a.artist
             itemView.setBackgroundResource(
-                if (current?.id == a.id) R.drawable.bg_audio_row_active else R.drawable.bg_chat_card
+                if (core.current?.id == a.id) R.drawable.bg_audio_row_active else R.drawable.bg_chat_card
             )
             itemView.setOnClickListener { onRowClicked(a) }
             menu.setOnClickListener { showMenu(menu, a) }

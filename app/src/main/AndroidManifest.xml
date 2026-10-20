@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <!-- Нужно только на Android 12 и старее для выбора фото из галереи -->
     <uses-permission
@@ -69,6 +71,12 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Фоновое воспроизведение музыки: уведомление с кнопками и управление с гарнитуры -->
+        <service
+            android:name=".MusicService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <!--
         Сервис для push-уведомлений через Firebase Cloud Messaging.

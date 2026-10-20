@@ -65,6 +65,8 @@ class MainActivity : AppCompatActivity() {
     /** Нативные экраны, которые показываются поверх WebView вместо веб-страниц /chats и /friends. */
     private enum class NativeSection { CHATS, FRIENDS, COMMUNITIES, MUSIC }
     private var nativeSection: NativeSection? = null
+    /** Чья музыка откроется в нативной вкладке: null — своя (выставляется при перехвате /music?id=…). */
+    private var pendingMusicUserId: String? = null
     /** Из нативного списка открыли профиль: «Назад» вернёт в этот список. */
     private var returnSection: NativeSection? = null
     /** Последний известный адрес страницы (в т.ч. после JS-роутинга сайта без перезагрузки). */
@@ -191,6 +193,7 @@ class MainActivity : AppCompatActivity() {
             swipe = findViewById(R.id.musicSwipe),
             recycler = findViewById(R.id.musicRecycler),
             emptyView = findViewById(R.id.musicEmpty),
+            bg = findViewById(R.id.nativeMusicBg),
             disc = findViewById(R.id.musicDisc),
             titleView = findViewById(R.id.musicTitle),
             artistView = findViewById(R.id.musicArtist),
@@ -202,6 +205,7 @@ class MainActivity : AppCompatActivity() {
             btnPlay = findViewById(R.id.musicPlay),
             btnNext = findViewById(R.id.musicNext),
             btnRepeat = findViewById(R.id.musicRepeat),
+            onLibraryChanged = { if (nativeSection == NativeSection.MUSIC) applyTopChrome(barsShouldShow()) },
             onAuthLost = authLost
         )
         sectionHeaderAction.setOnClickListener { musicController.pickFromDevice() }
@@ -585,7 +589,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupBottomNav() {
         findViewById<ImageButton>(R.id.navMusic).apply {
             setImageBitmap(loadAssetIcon("ui/icons/audios_aero.webp"))
-            setOnClickListener { returnSection = null; showNativeSection(NativeSection.MUSIC) }
+            setOnClickListener { returnSection = null; pendingMusicUserId = null; showNativeSection(NativeSection.MUSIC) }
         }
         findViewById<ImageButton>(R.id.navCommunities).apply {
             setImageBitmap(loadAssetIcon("ui/icons/communities_aero.webp"))
@@ -698,10 +702,16 @@ class MainActivity : AppCompatActivity() {
         if (section != null) {
             sectionHeaderIcon.setImageBitmap(loadAssetIcon(section.iconAsset))
             sectionHeaderTitle.setText(section.titleRes)
+            // Чужая библиотека: «Музыка: имя».
+            if (nativeSection == NativeSection.MUSIC && !musicController.isOwnLibrary && musicController.viewedName.isNotBlank()) {
+                sectionHeaderTitle.text = getString(section.titleRes) + ": " + musicController.viewedName
+            }
         }
         sectionHeader.visibility = if (section != null) View.VISIBLE else View.GONE
         topNavBar.visibility = if (barsVisible && section == null) View.VISIBLE else View.GONE
-        sectionHeaderAction.visibility = if (section != null && nativeSection == NativeSection.MUSIC) View.VISIBLE else View.GONE
+        // Загрузка с устройства — только в своей библиотеке.
+        sectionHeaderAction.visibility =
+            if (section != null && nativeSection == NativeSection.MUSIC && musicController.isOwnLibrary) View.VISIBLE else View.GONE
     }
 
     /**
@@ -793,7 +803,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showNativeSection(section: NativeSection) {
-        if (isLoggedIn == false || nativeSection == section) return
+        if (isLoggedIn == false) return
+        if (section == NativeSection.MUSIC) {
+            val changed = musicController.setViewedUser(pendingMusicUserId)
+            if (changed && nativeSection == NativeSection.MUSIC) {
+                // Уже на вкладке «Музыка», но открыли библиотеку другого человека (или вернулись к своей).
+                updateAddPostButton(currentUrl)
+                startNativeLoading()
+                return
+            }
+        }
+        if (nativeSection == section) return
         // Переключение между нативными вкладками: прежнюю останавливаем и прячем.
         stopNativeControllers()
         resetNativeSearch(nativeSection)
@@ -874,7 +894,9 @@ class MainActivity : AppCompatActivity() {
         if (path == "/music") {
             // Своя библиотека (без id или с собственным id) — нативный плеер; чужая — веб-страница.
             val id = uri.getQueryParameter("id")
-            return if (id == null || (id.isNotEmpty() && id == siteApi.userId)) NativeSection.MUSIC else null
+            if (id != null && !id.all { it.isDigit() }) return null
+            pendingMusicUserId = id?.takeIf { it.isNotEmpty() } // совпадение с собственным id определяет сам экран
+            return NativeSection.MUSIC
         }
         if (uri.getQueryParameter("chatId") != null || uri.getQueryParameter("id") != null) return null
         return when (path) {
