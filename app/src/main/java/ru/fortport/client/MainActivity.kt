@@ -95,6 +95,9 @@ class MainActivity : AppCompatActivity() {
         /** Страница авторизации сайта. ПРОВЕРЬТЕ путь: если у сайта другой — поменяйте здесь. */
         private const val LOGIN_PATH = "/login"
 
+        /** Паузы между перепроверками 401 перед признанием сессии потерянной. */
+        private val AUTH_RECHECK_DELAYS_MS = longArrayOf(2500L, 5000L, 8000L)
+
         /** Страницы, которые можно открывать без входа (не перенаправляем с них на логин). */
         private val PUBLIC_PATH_PREFIXES = listOf(
             LOGIN_PATH, "/register", "/signup", "/about", "/privacy", "/terms", "/support"
@@ -103,7 +106,8 @@ class MainActivity : AppCompatActivity() {
 
     /** null — ещё не знаем, true/false — по ответу сервера. */
     @Volatile private var isLoggedIn: Boolean? = null
-    private var authRecheckPending = false
+    /** Сколько подряд раз сайт ответил 401 на проверку баланса (0 — сброшено). */
+    private var authRecheckCount = 0
     /** Автоматически отправляем на логин только один раз за запуск, чтобы не зациклиться. */
     private var autoLoginRedirectDone = false
 
@@ -218,6 +222,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupWebView()
+        registerNetworkWatcher()
         setupSwipeRefresh()
         setupBottomNav()
         setupTopNav()
@@ -343,6 +348,7 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String?) {
                 super.onPageFinished(view, url)
+                restoreDefaultCacheMode()
                 progressBar.visibility = View.GONE
                 swipeRefresh.isRefreshing = false
 
@@ -378,6 +384,7 @@ class MainActivity : AppCompatActivity() {
             ) {
                 super.onReceivedError(view, request, error)
                 if (request.isForMainFrame) {
+                    restoreDefaultCacheMode()
                     lastLoadFailed = true
                     progressBar.visibility = View.GONE
                     swipeRefresh.isRefreshing = false
@@ -1415,24 +1422,31 @@ class MainActivity : AppCompatActivity() {
         fun onAuthState(loggedIn: Boolean) {
             runOnUiThread {
                 if (loggedIn) {
-                    authRecheckPending = false
+                    authRecheckCount = 0
                     isLoggedIn = true
                     updateBarsVisibility()
                     return@runOnUiThread
                 }
-                // 401 ещё не значит "вышел": у сессии мог истечь короткий токен, который
-                // сайт сам обновит при своих запросах. Без куки — точно не залогинен;
-                // с куки — перепроверяем через пару секунд и только потом решаем.
+                // 401 ещё не значит "вышел": на плохой сети куки могли не успеть обновиться
+                // (ответ с Set-Cookie потерялся по таймауту), а сайт обновляет короткий токен
+                // при своих запросах. Поэтому:
+                //  - без сети состояние входа вообще не трогаем;
+                //  - без куки — точно не залогинен;
+                //  - с куки — перепроверяем несколько раз с нарастающей паузой.
+                if (!isNetworkAvailable()) {
+                    authRecheckCount = 0
+                    return@runOnUiThread
+                }
                 val cookies = CookieManager.getInstance().getCookie(SITE_ORIGIN).orEmpty()
                 Log.d(TAG, "401 по балансу; имена куки: " + cookies.split(";").map { it.substringBefore("=").trim() })
-                if (cookies.isBlank() || authRecheckPending) {
-                    authRecheckPending = false
+                if (cookies.isBlank() || authRecheckCount >= AUTH_RECHECK_DELAYS_MS.size) {
+                    authRecheckCount = 0
                     isLoggedIn = false
                     updateBarsVisibility()
                     redirectToLoginIfNeeded()
                 } else {
-                    authRecheckPending = true
-                    webView.postDelayed({ refreshCdCoinsBalance() }, 3000)
+                    val delay = AUTH_RECHECK_DELAYS_MS[authRecheckCount++]
+                    webView.postDelayed({ refreshCdCoinsBalance() }, delay)
                 }
             }
         }
@@ -1667,7 +1681,9 @@ class MainActivity : AppCompatActivity() {
             webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
             webView.loadUrl(getString(R.string.site_url))
         } else {
-            // Пытаемся показать последнюю сохранённую версию из кэша, если она есть
+            // Пытаемся показать последнюю сохранённую версию из кэша, если она есть.
+            // Режим только на эту загрузку: вернём LOAD_DEFAULT в onPageFinished/onReceivedError,
+            // иначе все последующие запросы страницы (в т.ч. fetch к API) идут из кэша.
             webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
             webView.loadUrl(getString(R.string.site_url))
             showOffline()
@@ -1676,6 +1692,46 @@ class MainActivity : AppCompatActivity() {
 
     private fun showOffline() {
         offlineView.visibility = View.VISIBLE
+    }
+
+    private fun restoreDefaultCacheMode() {
+        if (webView.settings.cacheMode != WebSettings.LOAD_DEFAULT) {
+            webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+        }
+    }
+
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    /**
+     * Приложение запущено без сети (или сеть пропала во время загрузки) — когда интернет
+     * появляется, сами перезагружаем сайт, а не оставляем «плашку без подключения» и
+     * страницу из кэша, чьи запросы к API не прошли.
+     */
+    private fun registerNetworkWatcher() {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (lastLoadFailed || offlineView.visibility == View.VISIBLE) {
+                        restoreDefaultCacheMode()
+                        offlineView.visibility = View.GONE
+                        swipeRefresh.visibility = View.VISIBLE
+                        webView.loadUrl(webView.url?.takeIf { it.startsWith("http") } ?: getString(R.string.site_url))
+                    } else {
+                        // Сеть вернулась: перепроверяем вход (на случай отложенной ошибки).
+                        authRecheckCount = 0
+                        refreshCdCoinsBalance()
+                    }
+                }
+            }
+        }
+        try {
+            cm.registerDefaultNetworkCallback(cb)
+            networkCallback = cb
+        } catch (e: Exception) {
+            Log.w(TAG, "Не удалось подписаться на сеть", e)
+        }
     }
 
     /**
@@ -1837,6 +1893,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        networkCallback?.let {
+            try { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(it) } catch (e: Exception) {}
+        }
         chatsController.destroy()
         friendsController.destroy()
         communitiesController.destroy()
