@@ -94,11 +94,11 @@ class SiteApi(private val activity: AppCompatActivity) {
     fun checkSession(): SessionState = try {
         val r = get("/api/session/bootstrap")
         when {
-            r.code == 401 -> SessionState.INVALID
+            r.code == 401 -> invalidOrUnknown()
             r.code != 200 -> SessionState.UNKNOWN
             else -> {
                 val o = JSONObject(r.body)
-                if (!o.optBoolean("authenticated", false)) SessionState.INVALID
+                if (!o.optBoolean("authenticated", false)) invalidOrUnknown()
                 else {
                     val id = o.optJSONObject("user")?.optLong("id", 0L) ?: 0L
                     if (id > 0 && userId.isBlank()) userId = id.toString()
@@ -107,6 +107,14 @@ class SiteApi(private val activity: AppCompatActivity) {
             }
         }
     } catch (e: Exception) { SessionState.UNKNOWN }
+
+    /**
+     * Без X-Device-Id (localStorage ещё не прочитан) сервер мог ответить «не авторизован» лишь потому, что
+     * мы не назвали устройство. Если при этом куки есть — это не доказательство выхода (UNKNOWN).
+     */
+    private fun invalidOrUnknown(): SessionState =
+        if (deviceId.isBlank() && !CookieManager.getInstance().getCookie(ORIGIN).isNullOrBlank()) SessionState.UNKNOWN
+        else SessionState.INVALID
 
     /** INVALID возвращается, только если все попытки подряд (с паузой) вернули INVALID. Блокирующий, вызывать не из UI. */
     fun checkSessionConfirmed(attempts: Int = 3, delayMs: Long = 1500): SessionState {

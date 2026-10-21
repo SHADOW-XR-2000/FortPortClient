@@ -23,11 +23,14 @@ class SessionGuard(
     private val api: SiteApi,
     private val onValid: () -> Unit,
     private val onInvalid: () -> Unit,
-    private val onNetworkAvailable: () -> Unit
+    private val onNetworkAvailable: () -> Unit,
+    /** Подтянуть userId/deviceId/User-Agent из WebView (UI-поток); done() вызвать по готовности. */
+    private val prepare: (done: () -> Unit) -> Unit
 ) {
     private companion object {
         const val TAG = "SessionGuard"
         const val OK_INTERVAL_MS = 60_000L
+        const val INVALID_INTERVAL_MS = 10_000L // пока «не вошёл» — проверяем чаще, чтобы панели вернулись сразу после входа
         const val RETRY_BASE_MS = 5_000L
         const val RETRY_MAX_MS = 60_000L
         const val NET_SETTLE_MS = 2_000L // после смены сети даём маршруту установиться
@@ -85,6 +88,11 @@ class SessionGuard(
     private fun verify() {
         if (!active) return
         if (!running.compareAndSet(false, true)) return
+        prepare { runCheck() }
+    }
+
+    private fun runCheck() {
+        if (!active) { running.set(false); return }
         try {
             worker.execute {
                 val state = try { api.checkSessionConfirmed() } catch (e: Exception) { SiteApi.SessionState.UNKNOWN }
@@ -94,7 +102,7 @@ class SessionGuard(
                     Log.d(TAG, "сессия: $state")
                     when (state) {
                         SiteApi.SessionState.VALID -> { unknownStreak = 0; onValid(); schedule(OK_INTERVAL_MS) }
-                        SiteApi.SessionState.INVALID -> { unknownStreak = 0; onInvalid(); schedule(OK_INTERVAL_MS) }
+                        SiteApi.SessionState.INVALID -> { unknownStreak = 0; onInvalid(); schedule(INVALID_INTERVAL_MS) }
                         SiteApi.SessionState.UNKNOWN -> {
                             unknownStreak++
                             schedule(minOf(RETRY_MAX_MS, RETRY_BASE_MS shl minOf(unknownStreak - 1, 4)))

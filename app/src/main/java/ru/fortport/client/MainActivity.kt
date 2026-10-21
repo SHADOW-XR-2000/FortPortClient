@@ -147,6 +147,7 @@ class MainActivity : AppCompatActivity() {
                 updateBarsVisibility()
                 redirectToLoginIfNeeded()
             },
+            prepare = { done -> syncIdentity(done) },
             onNetworkAvailable = {
                 // Запуск без сети / обрыв при загрузке: сеть вернулась — перезагружаем сайт сами.
                 if (lastLoadFailed || offlineView.visibility == View.VISIBLE) loadSite()
@@ -343,6 +344,8 @@ class MainActivity : AppCompatActivity() {
             // полной перезагрузки), поэтому состояние кнопки обновляем здесь.
             override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
+                // Навигация при «не вошёл» (например, после входа без полной перезагрузки) — сразу перепроверяем.
+                if (url != null && isLoggedIn == false && !isAuthPage(url)) sessionGuard.requestVerify()
                 if (url != null && isLoggedIn != false) {
                     val uri = Uri.parse(url)
                     // JS-переход сайта на список переписок/друзей (или закрытие веб-диалога) — показываем нативный.
@@ -841,6 +844,22 @@ class MainActivity : AppCompatActivity() {
         updateAddPostButton(currentUrl)
         showBottomNav()
         startNativeLoading()
+    }
+
+    /** Берёт userId/deviceId из localStorage сайта и User-Agent WebView — без них нативные запросы выглядят для сервера чужими. */
+    private fun syncIdentity(done: () -> Unit) {
+        if (isFinishing || isDestroyed) return
+        webView.evaluateJavascript(
+            "(function(){try{return JSON.stringify({u:localStorage.getItem('userId')||'',d:localStorage.getItem('deviceId')||''});}catch(e){return '{}';}})()"
+        ) { raw ->
+            try {
+                val o = org.json.JSONObject(unwrapJsString(raw) ?: "{}")
+                siteApi.setSession(o.optString("u", ""), o.optString("d", ""), webView.settings.userAgentString)
+            } catch (e: Exception) {
+                Log.w(TAG, "Не удалось прочитать сессию из WebView", e)
+            }
+            done()
+        }
     }
 
     private fun startNativeLoading() {
@@ -1824,6 +1843,7 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         sessionGuard.stop()
+        CookieManager.getInstance().flush() // сессионные куки не должны пропасть, если систему убьёт процесс
         stopNativeControllers()
     }
 
