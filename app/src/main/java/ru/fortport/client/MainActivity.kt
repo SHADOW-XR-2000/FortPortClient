@@ -52,6 +52,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sectionHeaderTitle: TextView
     private lateinit var navHomeCenter: ImageButton
     private lateinit var siteApi: SiteApi
+    private lateinit var sessionGuard: SessionGuard
     private lateinit var nativeChatsPanel: View
     private lateinit var nativeFriendsPanel: View
     private lateinit var nativeCommunitiesPanel: View
@@ -103,7 +104,6 @@ class MainActivity : AppCompatActivity() {
 
     /** null — ещё не знаем, true/false — по ответу сервера. */
     @Volatile private var isLoggedIn: Boolean? = null
-    private var authRecheckPending = false
     /** Автоматически отправляем на логин только один раз за запуск, чтобы не зациклиться. */
     private var autoLoginRedirectDone = false
 
@@ -134,6 +134,24 @@ class MainActivity : AppCompatActivity() {
         nativeMusicPanel = findViewById(R.id.nativeMusicPanel)
         sectionHeaderAction = findViewById(R.id.sectionHeaderAction)
         siteApi = SiteApi(this)
+        sessionGuard = SessionGuard(
+            context = this,
+            api = siteApi,
+            onValid = {
+                if (isLoggedIn != true) { isLoggedIn = true; updateBarsVisibility() }
+            },
+            onInvalid = {
+                // Сервер трижды подряд подтвердил: сессии нет.
+                hideNativeSection()
+                isLoggedIn = false
+                updateBarsVisibility()
+                redirectToLoginIfNeeded()
+            },
+            onNetworkAvailable = {
+                // Запуск без сети / обрыв при загрузке: сеть вернулась — перезагружаем сайт сами.
+                if (lastLoadFailed || offlineView.visibility == View.VISIBLE) loadSite()
+            }
+        )
         val defaultBg = loadAssetIcon("styles/bg.webp")
         siteApi.attachBackground(findViewById(R.id.nativeChatsBg), defaultBg)
         siteApi.attachBackground(findViewById(R.id.nativeFriendsBg), defaultBg)
@@ -142,22 +160,8 @@ class MainActivity : AppCompatActivity() {
         val openChat: (String) -> Unit = { json ->
             startActivity(Intent(this, ChatActivity::class.java).putExtra(ChatActivity.EXTRA_PAYLOAD, json))
         }
-        val authLost: () -> Unit = {
-            // 401/403 отдельного API-запроса ещё не должен мгновенно выбрасывать
-            // пользователя: подтверждаем состояние сессии через bootstrap. При
-            // отсутствии сети/ошибке сервера сохраняем текущий экран и cookies.
-            siteApi.io.execute {
-                if (siteApi.confirmSessionInvalid()) {
-                    runOnUiThread {
-                        if (isFinishing || isDestroyed) return@runOnUiThread
-                        hideNativeSection()
-                        refreshCdCoinsBalance()
-                    }
-                } else {
-                    Log.w(TAG, "Auth error was not confirmed by session bootstrap; keeping current session")
-                }
-            }
-        }
+        // 401/403 на нативном экране — не повод выходить сразу: SessionGuard проверит сессию с повторами.
+        val authLost: () -> Unit = { sessionGuard.requestVerify() }
         chatsController = ChatsListController(
             activity = this,
             api = siteApi,
@@ -1427,25 +1431,13 @@ class MainActivity : AppCompatActivity() {
         fun onAuthState(loggedIn: Boolean) {
             runOnUiThread {
                 if (loggedIn) {
-                    authRecheckPending = false
                     isLoggedIn = true
                     updateBarsVisibility()
                     return@runOnUiThread
                 }
-                // 401 ещё не значит "вышел": у сессии мог истечь короткий токен, который
-                // сайт сам обновит при своих запросах. Без куки — точно не залогинен;
-                // с куки — перепроверяем через пару секунд и только потом решаем.
-                val cookies = CookieManager.getInstance().getCookie(SITE_ORIGIN).orEmpty()
-                Log.d(TAG, "401 по балансу; имена куки: " + cookies.split(";").map { it.substringBefore("=").trim() })
-                if (cookies.isBlank() || authRecheckPending) {
-                    authRecheckPending = false
-                    isLoggedIn = false
-                    updateBarsVisibility()
-                    redirectToLoginIfNeeded()
-                } else {
-                    authRecheckPending = true
-                    webView.postDelayed({ refreshCdCoinsBalance() }, 3000)
-                }
+                // 401 по балансу ещё не значит "вышел" (короткий токен, гонка запросов, смена сети/VPN).
+                // Решает только подтверждённая серией проверок /api/session/bootstrap, а не наличие куки.
+                sessionGuard.requestVerify()
             }
         }
 
@@ -1826,10 +1818,12 @@ class MainActivity : AppCompatActivity() {
             if (nativeSection != NativeSection.CHATS) webView.reload()
         }
         if (nativeSection != null) startNativeLoading()
+        sessionGuard.start()
     }
 
     override fun onPause() {
         super.onPause()
+        sessionGuard.stop()
         stopNativeControllers()
     }
 
@@ -1853,6 +1847,7 @@ class MainActivity : AppCompatActivity() {
         friendsController.destroy()
         communitiesController.destroy()
         musicController.destroy()
+        sessionGuard.destroy()
         siteApi.destroy()
         paymentWebView?.let { it.stopLoading(); it.destroy() }
         paymentWebView = null
