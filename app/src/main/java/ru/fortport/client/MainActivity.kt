@@ -52,7 +52,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sectionHeaderTitle: TextView
     private lateinit var navHomeCenter: ImageButton
     private lateinit var siteApi: SiteApi
-    private lateinit var sessionGuard: SessionGuard
     private lateinit var nativeChatsPanel: View
     private lateinit var nativeFriendsPanel: View
     private lateinit var nativeCommunitiesPanel: View
@@ -104,6 +103,10 @@ class MainActivity : AppCompatActivity() {
 
     /** null — ещё не знаем, true/false — по ответу сервера. */
     @Volatile private var isLoggedIn: Boolean? = null
+    private var authRecheckPending = false
+    @Volatile private var authConfirmationInFlight = false
+    @Volatile private var authStateVersion = 0
+    private val pendingAuthInvalidCallbacks = mutableListOf<() -> Unit>()
     /** Автоматически отправляем на логин только один раз за запуск, чтобы не зациклиться. */
     private var autoLoginRedirectDone = false
 
@@ -134,25 +137,6 @@ class MainActivity : AppCompatActivity() {
         nativeMusicPanel = findViewById(R.id.nativeMusicPanel)
         sectionHeaderAction = findViewById(R.id.sectionHeaderAction)
         siteApi = SiteApi(this)
-        sessionGuard = SessionGuard(
-            context = this,
-            api = siteApi,
-            onValid = {
-                if (isLoggedIn != true) { isLoggedIn = true; updateBarsVisibility() }
-            },
-            onInvalid = {
-                // Сервер трижды подряд подтвердил: сессии нет.
-                hideNativeSection()
-                isLoggedIn = false
-                updateBarsVisibility()
-                redirectToLoginIfNeeded()
-            },
-            prepare = { done -> syncIdentity(done) },
-            onNetworkAvailable = {
-                // Запуск без сети / обрыв при загрузке: сеть вернулась — перезагружаем сайт сами.
-                if (lastLoadFailed || offlineView.visibility == View.VISIBLE) loadSite()
-            }
-        )
         val defaultBg = loadAssetIcon("styles/bg.webp")
         siteApi.attachBackground(findViewById(R.id.nativeChatsBg), defaultBg)
         siteApi.attachBackground(findViewById(R.id.nativeFriendsBg), defaultBg)
@@ -161,8 +145,14 @@ class MainActivity : AppCompatActivity() {
         val openChat: (String) -> Unit = { json ->
             startActivity(Intent(this, ChatActivity::class.java).putExtra(ChatActivity.EXTRA_PAYLOAD, json))
         }
-        // 401/403 на нативном экране — не повод выходить сразу: SessionGuard проверит сессию с повторами.
-        val authLost: () -> Unit = { sessionGuard.requestVerify() }
+        val authLost: () -> Unit = {
+            // Ошибка одного нативного API-запроса не доказывает, что сессия истекла.
+            // Сначала подтверждаем состояние через /api/session/bootstrap.
+            confirmSessionBeforeLogout {
+                hideNativeSection()
+                redirectToLoginIfNeeded()
+            }
+        }
         chatsController = ChatsListController(
             activity = this,
             api = siteApi,
@@ -344,8 +334,6 @@ class MainActivity : AppCompatActivity() {
             // полной перезагрузки), поэтому состояние кнопки обновляем здесь.
             override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
-                // Навигация при «не вошёл» (например, после входа без полной перезагрузки) — сразу перепроверяем.
-                if (url != null && isLoggedIn == false && !isAuthPage(url)) sessionGuard.requestVerify()
                 if (url != null && isLoggedIn != false) {
                     val uri = Uri.parse(url)
                     // JS-переход сайта на список переписок/друзей (или закрытие веб-диалога) — показываем нативный.
@@ -846,22 +834,6 @@ class MainActivity : AppCompatActivity() {
         startNativeLoading()
     }
 
-    /** Берёт userId/deviceId из localStorage сайта и User-Agent WebView — без них нативные запросы выглядят для сервера чужими. */
-    private fun syncIdentity(done: () -> Unit) {
-        if (isFinishing || isDestroyed) return
-        webView.evaluateJavascript(
-            "(function(){try{return JSON.stringify({u:localStorage.getItem('userId')||'',d:localStorage.getItem('deviceId')||''});}catch(e){return '{}';}})()"
-        ) { raw ->
-            try {
-                val o = org.json.JSONObject(unwrapJsString(raw) ?: "{}")
-                siteApi.setSession(o.optString("u", ""), o.optString("d", ""), webView.settings.userAgentString)
-            } catch (e: Exception) {
-                Log.w(TAG, "Не удалось прочитать сессию из WebView", e)
-            }
-            done()
-        }
-    }
-
     private fun startNativeLoading() {
         webView.evaluateJavascript(
             "(function(){try{return JSON.stringify({u:localStorage.getItem('userId')||'',d:localStorage.getItem('deviceId')||''});}catch(e){return '{}';}})()"
@@ -1006,6 +978,47 @@ class MainActivity : AppCompatActivity() {
             true
         }
         popup.show()
+    }
+
+    /**
+     * Не сбрасываем авторизацию по одной ошибке отдельного API-запроса.
+     * Logout выполняется только если bootstrap явно подтвердил отсутствие сессии.
+     * Тайм-ауты, 403 и 5xx сохраняют текущее состояние и экран.
+     */
+    private fun confirmSessionBeforeLogout(onConfirmedInvalid: (() -> Unit)? = null) {
+        val version: Int
+        synchronized(this) {
+            if (onConfirmedInvalid != null) pendingAuthInvalidCallbacks.add(onConfirmedInvalid)
+            if (authConfirmationInFlight) return
+            authConfirmationInFlight = true
+            version = authStateVersion
+        }
+
+        siteApi.io.execute {
+            val confirmedInvalid = siteApi.confirmSessionInvalid()
+            runOnUiThread {
+                val callbacks: List<() -> Unit>
+                synchronized(this) {
+                    authConfirmationInFlight = false
+                    if (version != authStateVersion) {
+                        pendingAuthInvalidCallbacks.clear()
+                        return@runOnUiThread
+                    }
+                    callbacks = pendingAuthInvalidCallbacks.toList()
+                    pendingAuthInvalidCallbacks.clear()
+                }
+
+                if (confirmedInvalid) {
+                    authRecheckPending = false
+                    isLoggedIn = false
+                    updateBarsVisibility()
+                    if (callbacks.isNotEmpty()) callbacks.forEach { it() }
+                    else redirectToLoginIfNeeded()
+                } else {
+                    Log.w(TAG, "Session invalidation was not confirmed; keeping current session")
+                }
+            }
+        }
     }
 
     /**
@@ -1450,13 +1463,19 @@ class MainActivity : AppCompatActivity() {
         fun onAuthState(loggedIn: Boolean) {
             runOnUiThread {
                 if (loggedIn) {
+                    synchronized(this@MainActivity) {
+                        authStateVersion++
+                        pendingAuthInvalidCallbacks.clear()
+                    }
+                    authRecheckPending = false
                     isLoggedIn = true
                     updateBarsVisibility()
                     return@runOnUiThread
                 }
-                // 401 по балансу ещё не значит "вышел" (короткий токен, гонка запросов, смена сети/VPN).
-                // Решает только подтверждённая серией проверок /api/session/bootstrap, а не наличие куки.
-                sessionGuard.requestVerify()
+
+                // 401/403 от balance API — не доказательство завершения сессии:
+                // это может быть временный отказ, WAF или проблема маршрута.
+                confirmSessionBeforeLogout()
             }
         }
 
@@ -1837,13 +1856,10 @@ class MainActivity : AppCompatActivity() {
             if (nativeSection != NativeSection.CHATS) webView.reload()
         }
         if (nativeSection != null) startNativeLoading()
-        sessionGuard.start()
     }
 
     override fun onPause() {
         super.onPause()
-        sessionGuard.stop()
-        CookieManager.getInstance().flush() // сессионные куки не должны пропасть, если систему убьёт процесс
         stopNativeControllers()
     }
 
@@ -1867,7 +1883,6 @@ class MainActivity : AppCompatActivity() {
         friendsController.destroy()
         communitiesController.destroy()
         musicController.destroy()
-        sessionGuard.destroy()
         siteApi.destroy()
         paymentWebView?.let { it.stopLoading(); it.destroy() }
         paymentWebView = null
