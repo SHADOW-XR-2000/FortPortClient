@@ -1,0 +1,10 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.FortPort" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/fp_primary</item>
+        <item name="colorPrimaryDark">@color/fp_primary_dark</item>
+        <item name="colorAccent">@color/fp_accent</item>
+        <item name="android:windowBackground">@color/fp_background</item>
+        <item name="android:statusBarColor" tools:targetApi="21">@color/fp_primary</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
+    </style>
+</resources>
