@@ -73,6 +73,11 @@ class FriendsListController(
     private var searchResults: List<User>? = null
     private var rows: List<Row> = emptyList()
 
+    /** Чьих друзей показываем: null — свои. */
+    private var viewedUserId: String? = null
+    private var myFriendIds: Set<Long> = emptySet()
+    val viewing: Boolean get() = viewedUserId != null && viewedUserId != api.userId
+
     private var started = false
     private var loadedOnce = false
     private var bgCheckPending = false
@@ -132,6 +137,20 @@ class FriendsListController(
         hideKeyboard()
     }
 
+    /** Друзья другого пользователя (null — свои). true — выбор изменился, список сброшен. */
+    fun setViewedUser(id: String?): Boolean {
+        val n = id?.takeIf { it.isNotBlank() }
+        if (n == viewedUserId) return false
+        viewedUserId = n
+        friends = emptyList(); pending = emptyList(); searchResults = null
+        loadedOnce = false
+        ignoreTextChange = true
+        searchInput.setText("")
+        ignoreTextChange = false
+        rebuild()
+        return true
+    }
+
     /** Сброс поиска при уходе с вкладки (как при новой загрузке страницы на сайте). */
     fun reset() {
         ignoreTextChange = true
@@ -158,18 +177,27 @@ class FriendsListController(
             var auth = false
             var f: List<User> = emptyList()
             var p: List<User> = emptyList()
+            var mine: Set<Long> = emptySet()
             try {
                 when (api.ensureUserId()) {
                     1 -> auth = true
                     2 -> {}
                     else -> {
-                        val r = api.get("/api/friends/${api.userId}")
+                        val other = viewedUserId?.takeIf { it != api.userId }
+                        val r = api.get("/api/friends/${other ?: api.userId}")
                         if (r.code == 401 || r.code == 403) auth = true
                         else if (r.code == 200) {
                             val o = JSONObject(r.body)
                             f = parseUsers(o.optJSONArray("friends"))
-                            p = parseUsers(o.optJSONArray("pending"))
+                            p = if (other == null) parseUsers(o.optJSONArray("pending")) else emptyList()
                             ok = true
+                            if (other != null) {
+                                // Кто из них уже мой друг — чтобы показать правильные кнопки.
+                                val mr = api.get("/api/friends/${api.userId}")
+                                if (mr.code == 200) {
+                                    mine = parseUsers(JSONObject(mr.body).optJSONArray("friends")).map { u -> u.id }.toSet()
+                                }
+                            }
                         }
                     }
                 }
@@ -185,7 +213,7 @@ class FriendsListController(
                 swipe.isRefreshing = false
                 when {
                     auth -> onAuthLost()
-                    ok -> { loadedOnce = true; friends = f; pending = p; rebuild() }
+                    ok -> { loadedOnce = true; friends = f; pending = p; myFriendIds = mine; rebuild() }
                     !silent || !loadedOnce -> if (rows.isEmpty()) {
                         rows = listOf(Row.Empty("Не удалось загрузить друзей.\nПотяните вниз, чтобы повторить"))
                         adapter.notifyDataSetChanged()
@@ -253,7 +281,12 @@ class FriendsListController(
     private fun rebuild() {
         val out = ArrayList<Row>()
         val found = searchResults
-        if (found != null) {
+        if (viewing) {
+            out.add(Row.Header("Друзья пользователя"))
+            val list = friends.filter { u -> u.id.toString() != api.userId }
+            if (list.isEmpty() && loadedOnce) out.add(Row.Empty("У пользователя пока нет друзей"))
+            list.forEach { u -> out.add(Row.Card(u, Kind.SEARCH, myFriendIds.contains(u.id))) }
+        } else if (found != null) {
             out.add(Row.Header("Результаты поиска"))
             if (found.isEmpty()) out.add(Row.Empty("Пользователи не найдены"))
             found.forEach { u -> out.add(Row.Card(u, Kind.SEARCH, friends.any { it.id == u.id })) }

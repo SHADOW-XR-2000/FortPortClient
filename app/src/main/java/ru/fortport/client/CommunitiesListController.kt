@@ -79,6 +79,11 @@ class CommunitiesListController(
     private var searchResults: List<Comm>? = null
     private var rows: List<Row> = emptyList()
 
+    /** Чьи порты показываем: null — свои. */
+    private var viewedUserId: String? = null
+    private var myIds: Set<Long> = emptySet()
+    val viewing: Boolean get() = viewedUserId != null && viewedUserId != api.userId
+
     private var started = false
     private var loadedOnce = false
     private var bgCheckPending = false
@@ -147,6 +152,18 @@ class CommunitiesListController(
 
     fun destroy() { stop() }
 
+    /** Порты другого пользователя (null — свои). true — выбор изменился, список сброшен. */
+    fun setViewedUser(id: String?): Boolean {
+        val n = id?.takeIf { it.isNotBlank() }
+        if (n == viewedUserId) return false
+        viewedUserId = n
+        mine = emptyList(); searchResults = null
+        loadedOnce = false
+        clearSearchText()
+        rebuild()
+        return true
+    }
+
     private fun clearSearchText() {
         ignoreTextChange = true
         searchInput.setText("")
@@ -167,16 +184,32 @@ class CommunitiesListController(
             var ok = false
             var auth = false
             var list: List<Comm> = emptyList()
+            var mineIds: Set<Long> = emptySet()
             try {
                 when (api.ensureUserId()) {
                     1 -> auth = true
                     2 -> {}
                     else -> {
-                        val r = api.get("/api/user/communities/${api.userId}")
-                        if (r.code == 401 || r.code == 403) auth = true
-                        else if (r.code == 200) {
-                            list = parseComms(JSONObject(r.body).optJSONArray("communities"))
-                            ok = true
+                        val other = viewedUserId?.takeIf { it != api.userId }
+                        if (other == null) {
+                            val r = api.get("/api/user/communities/${api.userId}")
+                            if (r.code == 401 || r.code == 403) auth = true
+                            else if (r.code == 200) {
+                                list = parseComms(JSONObject(r.body).optJSONArray("communities"))
+                                ok = true
+                            }
+                        } else {
+                            // Чужие порты: массив [{id, username, profilePicture, type}]; свои нужны для кнопок подключения.
+                            val r = api.get("/api/users/$other/communities")
+                            if (r.code == 401 || r.code == 403) auth = true
+                            else if (r.code == 200) {
+                                list = parseComms(JSONArray(r.body.trim()))
+                                ok = true
+                                val mr = api.get("/api/user/communities/${api.userId}")
+                                if (mr.code == 200) {
+                                    mineIds = parseComms(JSONObject(mr.body).optJSONArray("communities")).map { c -> c.id }.toSet()
+                                }
+                            }
                         }
                     }
                 }
@@ -192,7 +225,7 @@ class CommunitiesListController(
                 swipe.isRefreshing = false
                 when {
                     auth -> onAuthLost()
-                    ok -> { loadedOnce = true; mine = list; rebuild() }
+                    ok -> { loadedOnce = true; mine = list; myIds = mineIds; rebuild() }
                     !silent || !loadedOnce -> if (rows.isEmpty()) {
                         rows = listOf(Row.Empty("Не удалось загрузить порты.\nПотяните вниз, чтобы повторить"))
                         adapter.notifyDataSetChanged()
@@ -264,7 +297,11 @@ class CommunitiesListController(
     private fun rebuild() {
         val out = ArrayList<Row>()
         val found = searchResults
-        if (found != null) {
+        if (viewing) {
+            out.add(Row.Header("Порты пользователя"))
+            if (mine.isEmpty() && loadedOnce) out.add(Row.Empty("Нет подключённых портов"))
+            mine.forEach { c -> out.add(Row.Card(c, Kind.SEARCH, myIds.contains(c.id))) }
+        } else if (found != null) {
             out.add(Row.Header("Результаты поиска"))
             if (found.isEmpty()) out.add(Row.Empty("Порты не найдены"))
             found.forEach { c -> out.add(Row.Card(c, Kind.SEARCH, mine.any { it.id == c.id })) }

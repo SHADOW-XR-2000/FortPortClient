@@ -94,6 +94,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = UiUtil.rect(Color.WHITE, Color.WHITE, 2, 4, ctx)
             setPadding(dp(ctx, 2), dp(ctx, 2), dp(ctx, 2), dp(ctx, 2))
+            clipToOutline = true
         }
         row.addView(big, UiUtil.lp(dp(ctx, 60), dp(ctx, 60)))
         val bigPath = if (p.communityId != null) community?.avatar.orEmpty() else author?.avatar.orEmpty()
@@ -111,9 +112,12 @@ class PostCardView(context: Context) : LinearLayout(context) {
                     if (!p.isAnonymous) {
                         val small = ImageView(ctx).apply {
                             scaleType = ImageView.ScaleType.CENTER_CROP
-                            background = UiUtil.rect(Color.WHITE, Color.WHITE, 1, 3, ctx)
+                            // Как у основной аватарки: белая рамка и слегка скруглённые углы.
+                            background = UiUtil.rect(Color.WHITE, Color.WHITE, 1, 4, ctx)
+                            setPadding(dp(ctx, 2), dp(ctx, 2), dp(ctx, 2), dp(ctx, 2))
+                            clipToOutline = true
                         }
-                        addView(small, UiUtil.lp(dp(ctx, 26), dp(ctx, 26)))
+                        addView(small, UiUtil.lp(dp(ctx, 28), dp(ctx, 28)))
                         host.api.loadAvatar(small, author?.avatar.orEmpty())
                         small.setOnClickListener { p.userId?.let { host.openProfile(it) } }
                     }
@@ -173,11 +177,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
         val scroll = HorizontalScrollView(ctx).apply { isHorizontalScrollBarEnabled = false }
         val icons = LinearLayout(ctx).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         scroll.addView(icons)
-        if (list == null) {
-            icons.addView(UiUtil.text(ctx, 13f, UiUtil.SUB).apply { text = "Награды" })
-        } else if (list.isEmpty()) {
-            icons.addView(UiUtil.text(ctx, 14f, UiUtil.TEXT).apply { text = "Блок наград" })
-        } else {
+        if (!list.isNullOrEmpty()) {
             list.groupBy { it.awardId }.values.forEach { group ->
                 val cell = FrameLayout(ctx)
                 val iv = ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
@@ -229,7 +229,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
         carousel?.release(); carousel = null
         bodyHolder.removeAllViews()
         val ctx = context
-        val hasAnyBody = p.files.isNotEmpty() || p.poll != null || p.content.isNotBlank()
+        val hasAnyBody = p.files.isNotEmpty() || p.poll != null || p.content.isNotBlank() || p.title.isNotBlank()
         if (!hasAnyBody) return
 
         if (p.isCovered) {
@@ -256,6 +256,15 @@ class PostCardView(context: Context) : LinearLayout(context) {
             return
         }
 
+        if (p.title.isNotBlank()) {
+            bodyHolder.addView(
+                UiUtil.text(ctx, 18f, UiUtil.TEXT, bold = true).apply {
+                    text = p.title
+                    setPadding(dp(ctx, 12), dp(ctx, 10), dp(ctx, 12), dp(ctx, 6))
+                },
+                UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP)
+            )
+        }
         val visual = PostParser.visualMedia(p)
         val audio = PostParser.audioItems(p)
         if (visual.isNotEmpty()) {

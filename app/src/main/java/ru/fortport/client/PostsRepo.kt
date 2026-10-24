@@ -2,6 +2,10 @@ package ru.fortport.client
 
 import org.json.JSONArray
 import org.json.JSONObject
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
@@ -49,6 +53,8 @@ class PostsRepo(private val api: SiteApi) {
     val pool: ExecutorService = Executors.newFixedThreadPool(3)
 
     @Volatile var users: Map<Long, UserLite> = emptyMap()
+    /** Полный справочник GET /api/users уже загружен (а не только добавленные вручную). */
+    @Volatile var usersLoaded = false
     private val communities = ConcurrentHashMap<Long, CommunityLite>()
     private val communityMisses = ConcurrentHashMap.newKeySet<Long>()
 
@@ -73,7 +79,14 @@ class PostsRepo(private val api: SiteApi) {
             )
         }
         users = m
+        usersLoaded = true
         return true
+    }
+
+    /** Добавляет пользователя в справочник (профиль открыт, а полный /api/users ещё не загружен). */
+    fun putUser(u: UserLite) {
+        if (users.containsKey(u.id)) return
+        users = users + (u.id to u)
     }
 
     fun community(id: Long): CommunityLite? {
@@ -87,6 +100,8 @@ class PostsRepo(private val api: SiteApi) {
                 .also { communities[id] = it }
         } catch (e: Exception) { null }
     }
+
+    fun putCommunity(c: CommunityLite) { communities[c.id] = c }
 
     fun cachedCommunity(id: Long): CommunityLite? = communities[id]
 
@@ -310,13 +325,95 @@ class PostsRepo(private val api: SiteApi) {
         outcome(api.send("POST", "/api/polls/vote", JSONObject().put("choiceIds", ids).toString()))
     }
 
-    fun unvote(choiceId: Long): Outcome = safe {
-        outcome(api.send("DELETE", "/api/polls/vote", JSONObject().put("choiceId", choiceId).toString()))
+    /** DELETE с JSON-телом (отмена голоса). Не зависит от того, отправляет ли SiteApi.send тело для DELETE. */
+    private fun deleteWithBody(path: String, json: String): SiteApi.Resp {
+        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val req = Request.Builder().url(SiteApi.ORIGIN + path).method("DELETE", body).build()
+        api.client.newCall(req).execute().use { return SiteApi.Resp(it.code, it.body?.string().orEmpty()) }
     }
 
-    fun likeComment(postId: Long, commentId: Long): Outcome = safe {
-        outcome(api.send("POST", "/api/posts/$postId/comments/$commentId/like", "{}"))
+    fun unvote(choiceId: Long): Outcome = safe {
+        outcome(deleteWithBody("/api/polls/vote", JSONObject().put("choiceId", choiceId).toString()))
     }
+
+    /** «Да» комментарию: extra = {success, liked, likeCount}. */
+    fun likeComment(postId: Long, commentId: Long): Outcome = safe {
+        val body = JSONObject().put("userId", me).toString()
+        outcome(api.send("POST", "/api/posts/$postId/comments/$commentId/like", body))
+    }
+
+    /**
+     * Новый комментарий (multipart: userId, content, attachment?, refId? — id комментария, на который отвечаем).
+     * После успеха сайт перечитывает пост целиком — так же делает и экран поста.
+     */
+    fun addComment(
+        postId: Long, content: String, file: ByteArray?, fileName: String, mime: String, refId: Long?,
+        existingPath: String? = null, existingType: String? = null
+    ): Outcome = safe {
+        val b = MultipartBody.Builder().setType(MultipartBody.FORM)
+        b.addFormDataPart("userId", me.toString())
+        b.addFormDataPart("content", content)
+        if (file != null) {
+            b.addFormDataPart("attachment", fileName, file.toRequestBody(mime.ifBlank { "application/octet-stream" }.toMediaType()))
+        }
+        if (existingPath != null && file == null) {
+            // Файл из медиатеки: уходит ссылка, а не файл (как existingAttachment на сайте).
+            b.addFormDataPart(
+                "existingAttachment",
+                JSONObject().put("path", existingPath).put("type", existingType ?: "image").toString()
+            )
+        }
+        if (refId != null) b.addFormDataPart("refId", refId.toString())
+        val req = Request.Builder().url(SiteApi.ORIGIN + "/api/posts/$postId/comments").post(b.build()).build()
+        api.client.newCall(req).execute().use { outcome(SiteApi.Resp(it.code, it.body?.string().orEmpty())) }
+    }
+
+    class UploadFile(val bytes: ByteArray, val name: String, val mime: String)
+
+    class NewPost(
+        val content: String, val community: Long?, val anonymous: Boolean,
+        val spoiler: Boolean, val spoilerPreview: String, val nsfw: Boolean,
+        val pollJson: String?,
+        /** Файлы из медиатеки: (путь, тип image|gif|video|audio). */
+        val existing: List<Pair<String, String>>,
+        val files: List<UploadFile>
+    )
+
+    /** Новый пост: POST /api/posts (multipart, как createPost() на сайте). */
+    fun createPost(d: NewPost): Outcome = safe {
+        val b = MultipartBody.Builder().setType(MultipartBody.FORM)
+        b.addFormDataPart("content", d.content)
+        b.addFormDataPart("userId", me.toString())
+        b.addFormDataPart("community", d.community?.toString() ?: "")
+        b.addFormDataPart("isAnonymous", d.anonymous.toString())
+        if (d.spoiler) {
+            b.addFormDataPart("isSpoiler", "1")
+            b.addFormDataPart("spoilerPreview", d.spoilerPreview)
+        }
+        if (d.nsfw) b.addFormDataPart("isNsfw", "1")
+        if (d.pollJson != null) b.addFormDataPart("poll", d.pollJson)
+        if (d.existing.isNotEmpty()) {
+            val arr = JSONArray()
+            d.existing.forEach { e -> arr.put(JSONObject().put("path", e.first).put("type", e.second)) }
+            b.addFormDataPart("existingFiles", arr.toString())
+        }
+        d.files.forEach { f ->
+            b.addFormDataPart("files", f.name, f.bytes.toRequestBody(f.mime.ifBlank { "application/octet-stream" }.toMediaType()))
+        }
+        val req = Request.Builder().url(SiteApi.ORIGIN + "/api/posts").post(b.build()).build()
+        api.client.newCall(req).execute().use { outcome(SiteApi.Resp(it.code, it.body?.string().orEmpty())) }
+    }
+
+    /** Порты, в которые можно написать (выбор «Новый пост в:»): [(id, название)]. */
+    fun loadMyPorts(): List<Pair<Long, String>> = try {
+        val r = api.get("/api/users/$me/commIds")
+        val out = ArrayList<Pair<Long, String>>()
+        if (r.code == 200) {
+            val a = JSONArray(r.body)
+            for (i in 0 until a.length()) a.optJSONObject(i)?.let { o -> out.add(o.optLong("id") to api.str(o, "username")) }
+        }
+        out
+    } catch (e: Exception) { emptyList() }
 
     fun deleteComment(postId: Long, commentId: Long): Outcome = safe {
         outcome(api.send("DELETE", "/api/posts/$postId/comments/$commentId", null))

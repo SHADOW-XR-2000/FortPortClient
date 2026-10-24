@@ -130,7 +130,7 @@ class FeedController(
                         activeTab = t.firstOrNull { it.name == saved } ?: t.firstOrNull() ?: repo.defaultTab()
                     }
                 }
-                if (repo.users.isEmpty()) loadUsersAsync()
+                if (!repo.usersLoaded) loadUsersAsync()
                 val page = repo.loadPosts(FeedSource.Tab(activeTab), null)
                 post {
                     if (gen != generation) return@post
@@ -214,6 +214,19 @@ class FeedController(
     override fun balanceChanged() = onBalanceChanged()
     override fun authLost() = onAuthLost()
     override fun reloadList() = reload()
+
+    /** Пост удалили на его странице. */
+    fun dropPost(id: Long) {
+        val i = posts.indexOfFirst { it.id == id }
+        if (i < 0) return
+        posts.removeAt(i)
+        adapter.notifyItemRemoved(i + 1)
+    }
+
+    /** Вернулись со страницы поста: перерисовать карточки (баллы, опрос, число комментариев). */
+    fun refreshCards() {
+        if (posts.isNotEmpty()) adapter.notifyItemRangeChanged(1, posts.size)
+    }
 
     override fun removePost(post: Post) {
         val i = posts.indexOfFirst { it.id == post.id }
