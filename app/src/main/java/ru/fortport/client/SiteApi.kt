@@ -76,8 +76,9 @@ class SiteApi(private val activity: AppCompatActivity) {
     /** json == null — тело пустое (для POST) или отсутствует (GET/DELETE). */
     fun send(method: String, path: String, json: String?): Resp {
         val body = when {
-            method == "GET" || method == "DELETE" -> null
-            json != null -> json.toRequestBody(JSON_TYPE)
+            method == "GET" -> null
+            json != null -> json.toRequestBody(JSON_TYPE) // в т.ч. DELETE с телом (отмена голоса в опросе)
+            method == "DELETE" -> null
             else -> ByteArray(0).toRequestBody(null)
         }
         val req = Request.Builder().url(ORIGIN + path).method(method, body).build()
@@ -165,6 +166,42 @@ class SiteApi(private val activity: AppCompatActivity) {
                 activity.runOnUiThread { if (iv.tag == url) iv.setImageBitmap(bmp) }
             }
         }
+    }
+
+    /**
+     * Картинка поста/награды произвольного размера (до [maxSide] по длинной стороне).
+     * Результат кэшируется в памяти; [onResult] вызывается в UI-потоке, если ImageView
+     * всё ещё ждёт именно этот адрес (его могли переиспользовать для другой карточки).
+     */
+    fun loadImage(iv: ImageView, path: String, maxSide: Int, onResult: ((Boolean) -> Unit)? = null) {
+        if (path.isBlank()) { onResult?.invoke(false); return }
+        val url = absUrl(path)
+        val key = "$url@$maxSide"
+        iv.tag = key
+        imgCache.get(key)?.let { iv.setImageBitmap(it); onResult?.invoke(true); return }
+        iv.setImageDrawable(null)
+        imgPool.execute {
+            val bmp = try {
+                client.newCall(Request.Builder().url(url).get().build()).execute().use { r ->
+                    if (!r.isSuccessful) null else r.body?.bytes()?.let { decodeSampled(it, maxSide) }
+                }
+            } catch (e: Exception) { null }
+            if (bmp != null) imgCache.put(key, bmp)
+            activity.runOnUiThread {
+                if (activity.isDestroyed || iv.tag != key) return@runOnUiThread
+                if (bmp != null) iv.setImageBitmap(bmp)
+                onResult?.invoke(bmp != null)
+            }
+        }
+    }
+
+    /** Заголовки для потокового воспроизведения медиа (MediaPlayer/VideoView) с сессией сайта. */
+    fun mediaHeaders(): Map<String, String> {
+        val h = HashMap<String, String>()
+        CookieManager.getInstance().getCookie(ORIGIN)?.let { h["Cookie"] = it }
+        if (userAgent.isNotBlank()) h["User-Agent"] = userAgent
+        if (deviceId.isNotBlank()) h["X-Device-Id"] = deviceId
+        return h
     }
 
     // ------------------------------------------------------------------ фон

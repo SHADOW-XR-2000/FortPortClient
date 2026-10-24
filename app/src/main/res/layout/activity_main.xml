@@ -142,6 +142,46 @@
 
     </FrameLayout>
 
+    <!-- Нативная основная лента: поверх WebView, между обычными верхней и нижней панелями. -->
+    <FrameLayout
+        android:id="@+id/nativeFeedPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#C7EAF5"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/nativeFeedBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:importantForAccessibility="no" />
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/feedSwipe"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/feedRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="8dp"
+                android:paddingTop="78dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="72dp" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    </FrameLayout>
+
     <!-- Нативный список переписок: поверх WebView, под шапкой раздела и нижней панелью. -->
     <FrameLayout
         android:id="@+id/nativeChatsPanel"
