@@ -57,18 +57,55 @@ class MainActivity : AppCompatActivity() {
     private lateinit var nativeCommunitiesPanel: View
     private lateinit var nativeMusicPanel: View
     private lateinit var nativeFeedPanel: View
+    private lateinit var nativePostPanel: View
+    private lateinit var nativeProfilePanel: View
+    private lateinit var nativePortPanel: View
+    private lateinit var nativeNotifsPanel: View
+    private lateinit var notifBottomBar: View
+    private lateinit var postTopBar: View
     private lateinit var sectionHeaderAction: ImageButton
     private lateinit var chatsController: ChatsListController
     private lateinit var friendsController: FriendsListController
     private lateinit var communitiesController: CommunitiesListController
     private lateinit var musicController: MusicController
     private lateinit var feedController: FeedController
+    private lateinit var postController: PostPageController
+    private lateinit var profileController: ProfileController
+    private lateinit var portController: PortController
+    private lateinit var notifsController: NotificationsController
 
     /** Нативные экраны, которые показываются поверх WebView вместо веб-страниц /chats и /friends. */
-    private enum class NativeSection { CHATS, FRIENDS, COMMUNITIES, MUSIC, FEED }
+    private enum class NativeSection { CHATS, FRIENDS, COMMUNITIES, MUSIC, FEED, POST, PROFILE, PORT, NOTIFS }
     private var nativeSection: NativeSection? = null
     /** Чья музыка откроется в нативной вкладке: null — своя (выставляется при перехвате /music?id=…). */
     private var pendingMusicUserId: String? = null
+    /** Открытый пост: какой показать (и, если уже есть, его данные из ленты). */
+    private var pendingPostId = 0L
+    private var pendingPost: Post? = null
+    /** Раздел, из которого открыли пост: «Назад» вернёт в него (лента сохраняет позицию). */
+    private var postParent: NativeSection? = null
+    /** Пост, из которого ушли в профиль/порт: «Назад» оттуда вернёт к нему. */
+    private var postReturnId = 0L
+    /** После goBack() к главной не показывать ленту поверх вернувшегося нативного поста. */
+    private var skipNativeNavOnce = false
+    /** Чей профиль открыт на нативном экране PROFILE (0 — свой). */
+    private var pendingProfileId = 0L
+    /** Куда вернёт «Назад» из профиля/музыки, открытых из нативных экранов (стек переходов). */
+    private class NavFrame(val section: NativeSection, val postId: Long, val postParent: NativeSection?, val profileId: Long, val communityId: Long)
+    private val navFrames = ArrayList<NavFrame>()
+    /** Профиль, из которого ушли на веб-страницу (порт, друзья, настройки): «Назад» вернёт именно его. */
+    private var returnProfileId = 0L
+    /** Чей порт открыт на нативном экране PORT. */
+    private var pendingCommunityId = 0L
+    private var returnPortId = 0L
+    /** Чьи друзья/порты показать в нативных списках: null — свои. */
+    private var pendingFriendsUserId: String? = null
+    private var pendingCommunitiesUserId: String? = null
+    private var commentPickCb: ((Uri) -> Unit)? = null
+    private val commentPicker =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) commentPickCb?.invoke(uri)
+        }
     /** Из нативного списка открыли профиль: «Назад» вернёт в этот список. */
     private var returnSection: NativeSection? = null
     /** Последний известный адрес страницы (в т.ч. после JS-роутинга сайта без перезагрузки). */
@@ -138,6 +175,12 @@ class MainActivity : AppCompatActivity() {
         nativeCommunitiesPanel = findViewById(R.id.nativeCommunitiesPanel)
         nativeMusicPanel = findViewById(R.id.nativeMusicPanel)
         nativeFeedPanel = findViewById(R.id.nativeFeedPanel)
+        nativePostPanel = findViewById(R.id.nativePostPanel)
+        nativeProfilePanel = findViewById(R.id.nativeProfilePanel)
+        nativePortPanel = findViewById(R.id.nativePortPanel)
+        nativeNotifsPanel = findViewById(R.id.nativeNotifsPanel)
+        notifBottomBar = findViewById(R.id.notifBottomBar)
+        postTopBar = findViewById(R.id.postTopBar)
         sectionHeaderAction = findViewById(R.id.sectionHeaderAction)
         siteApi = SiteApi(this)
         val defaultBg = loadAssetIcon("styles/bg.webp")
@@ -146,6 +189,10 @@ class MainActivity : AppCompatActivity() {
         siteApi.attachBackground(findViewById(R.id.nativeCommunitiesBg), defaultBg)
         siteApi.attachBackground(findViewById(R.id.nativeMusicBg), defaultBg)
         siteApi.attachBackground(findViewById(R.id.nativeFeedBg), defaultBg)
+        siteApi.attachBackground(findViewById(R.id.nativePostBg), defaultBg)
+        siteApi.attachBackground(findViewById(R.id.nativeProfileBg), defaultBg)
+        siteApi.attachBackground(findViewById(R.id.nativePortBg), defaultBg)
+        siteApi.attachBackground(findViewById(R.id.nativeNotifsBg), defaultBg)
         val openChat: (String) -> Unit = { json ->
             startActivity(Intent(this, ChatActivity::class.java).putExtra(ChatActivity.EXTRA_PAYLOAD, json))
         }
@@ -173,11 +220,7 @@ class MainActivity : AppCompatActivity() {
             recycler = findViewById(R.id.friendsRecycler),
             searchInput = findViewById(R.id.friendsSearch),
             onOpenChat = openChat,
-            onOpenProfile = { id ->
-                returnSection = nativeSection
-                hideNativeSection()
-                webView.loadUrl("$SITE_ORIGIN/profile?id=$id")
-            },
+            onOpenProfile = { id -> openNativeProfile(id) },
             onAuthLost = authLost
         )
         communitiesController = CommunitiesListController(
@@ -187,9 +230,7 @@ class MainActivity : AppCompatActivity() {
             recycler = findViewById(R.id.communitiesRecycler),
             searchInput = findViewById(R.id.communitiesSearch),
             onOpenCommunity = { id ->
-                returnSection = nativeSection
-                hideNativeSection()
-                webView.loadUrl("$SITE_ORIGIN/community?id=$id")
+                openNativeCommunity(id)
             },
             onCreateCommunity = {
                 returnSection = nativeSection
@@ -224,25 +265,108 @@ class MainActivity : AppCompatActivity() {
             api = siteApi,
             swipe = findViewById(R.id.feedSwipe),
             recycler = findViewById(R.id.feedRecycler),
-            // Нативной страницы поста (концепция 3) пока нет: открываем веб-страницу, «Назад» вернёт в ленту на то же место.
-            onOpenPost = { post ->
-                returnSection = NativeSection.FEED
-                hideNativeSection()
-                webView.loadUrl("$SITE_ORIGIN/post?id=${post.id}")
-            },
-            onOpenProfile = { id ->
-                returnSection = NativeSection.FEED
-                hideNativeSection()
-                webView.loadUrl("$SITE_ORIGIN/profile?id=$id")
-            },
+            onOpenPost = { post -> openNativePost(post.id, post) },
+            onOpenProfile = { id -> openNativeProfile(id) },
             onOpenCommunity = { id ->
-                returnSection = NativeSection.FEED
-                hideNativeSection()
-                webView.loadUrl("$SITE_ORIGIN/community?id=$id")
+                openNativeCommunity(id)
             },
             onBalanceChanged = { refreshCdCoinsBalance() },
             onAuthLost = authLost
         )
+        postController = PostPageController(
+            activity = this,
+            api = siteApi,
+            repo = feedController.repo,
+            swipe = findViewById(R.id.postSwipe),
+            recycler = findViewById(R.id.postRecycler),
+            onOpenProfile = { id -> openNativeProfile(id) },
+            onOpenCommunity = { id ->
+                openNativeCommunity(id)
+            },
+            onBalanceChanged = { refreshCdCoinsBalance() },
+            onAuthLost = authLost,
+            pickFile = { done -> commentPickCb = done; commentPicker.launch("*/*") },
+            onClose = { feedController.dropPost(pendingPostId); profileController.dropPost(pendingPostId); portController.dropPost(pendingPostId); onBackPressed() }
+        )
+        notifsController = NotificationsController(
+            activity = this,
+            api = siteApi,
+            swipe = findViewById(R.id.notifsSwipe),
+            recycler = findViewById(R.id.notifsRecycler),
+            onOpenPost = { postId, commentId ->
+                openNativePost(postId, null)
+                if (commentId != 0L) postController.focusComment(commentId)
+            },
+            onOpenProfile = { id -> openNativeProfile(id) },
+            onCount = { n ->
+                if (n <= 0) navNotifBadge.visibility = View.GONE
+                else { navNotifBadge.text = if (n > 99) "99+" else n.toString(); navNotifBadge.visibility = View.VISIBLE }
+            },
+            onAuthLost = authLost
+        )
+        findViewById<View>(R.id.notifReadAll).setOnClickListener { notifsController.markAll() }
+        findViewById<View>(R.id.notifRefresh).setOnClickListener { notifsController.refresh() }
+        findViewById<View>(R.id.notifHome).setOnClickListener {
+            leaveNative()
+            webView.loadUrl("$SITE_ORIGIN")
+        }
+        portController = PortController(
+            activity = this,
+            api = siteApi,
+            repo = feedController.repo,
+            swipe = findViewById(R.id.portSwipe),
+            recycler = findViewById(R.id.portRecycler),
+            bg = findViewById(R.id.nativePortBg),
+            onOpenPost = { post -> openNativePost(post.id, post) },
+            onOpenProfile = { id -> openNativeProfile(id) },
+            onOpenWeb = { path ->
+                returnSection = NativeSection.PORT
+                returnPortId = pendingCommunityId
+                hideNativeSection()
+                webView.loadUrl("$SITE_ORIGIN$path")
+            },
+            onInfoLoaded = { if (nativeSection == NativeSection.PORT) updateAddPostButton(currentUrl) },
+            onBalanceChanged = { refreshCdCoinsBalance() },
+            onAuthLost = authLost
+        )
+        profileController = ProfileController(
+            activity = this,
+            api = siteApi,
+            repo = feedController.repo,
+            swipe = findViewById(R.id.profileSwipe),
+            recycler = findViewById(R.id.profileRecycler),
+            bg = findViewById(R.id.nativeProfileBg),
+            onOpenPost = { post -> openNativePost(post.id, post) },
+            onOpenProfile = { id -> openNativeProfile(id) },
+            onOpenCommunity = { id ->
+                openNativeCommunity(id)
+            },
+            onOpenMusic = { id ->
+                pushNavFrame()
+                pendingMusicUserId = id.toString()
+                showNativeSection(NativeSection.MUSIC)
+            },
+            onOpenFriends = { id ->
+                pushNavFrame()
+                pendingFriendsUserId = id.toString()
+                showNativeSection(NativeSection.FRIENDS)
+            },
+            onOpenPorts = { id ->
+                pushNavFrame()
+                pendingCommunitiesUserId = id.toString()
+                showNativeSection(NativeSection.COMMUNITIES)
+            },
+            onOpenWeb = { path ->
+                returnSection = NativeSection.PROFILE
+                returnProfileId = pendingProfileId
+                hideNativeSection()
+                webView.loadUrl("$SITE_ORIGIN$path")
+            },
+            onOpenChat = openChat,
+            onBalanceChanged = { refreshCdCoinsBalance() },
+            onAuthLost = authLost
+        )
+        findViewById<View>(R.id.postBackButton).setOnClickListener { onBackPressed() }
         sectionHeaderAction.setOnClickListener { musicController.pickFromDevice() }
         navProfileAvatar = findViewById(R.id.navProfileAvatar)
         navNotifBadge = findViewById(R.id.navNotifBadge)
@@ -365,7 +489,8 @@ class MainActivity : AppCompatActivity() {
                 if (url != null && isLoggedIn != false) {
                     val uri = Uri.parse(url)
                     // JS-переход сайта на список переписок/друзей (или закрытие веб-диалога) — показываем нативный.
-                    nativeSectionFor(uri)?.let { showNativeSection(it) }
+                    if (skipNativeNavOnce) skipNativeNavOnce = false
+                    else nativeSectionFor(uri)?.let { showNativeSection(it) }
                 }
                 updateAddPostButton(url)
             }
@@ -381,7 +506,7 @@ class MainActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
                 swipeRefresh.isRefreshing = false
                 // Лента открылась поверх только что загруженной главной: сессия сайта (userId/deviceId) теперь точно доступна.
-                if (nativeSection == NativeSection.FEED) startNativeLoading()
+                if (nativeSection == NativeSection.FEED || nativeSection == NativeSection.PROFILE || nativeSection == NativeSection.PORT) startNativeLoading()
 
                 // lastLoadFailed может быть true даже если сеть на устройстве есть —
                 // например, когда сам сервер сейчас не отвечает (не наш случай
@@ -626,11 +751,11 @@ class MainActivity : AppCompatActivity() {
     private fun setupBottomNav() {
         findViewById<ImageButton>(R.id.navMusic).apply {
             setImageBitmap(loadAssetIcon("ui/icons/audios_aero.webp"))
-            setOnClickListener { returnSection = null; pendingMusicUserId = null; showNativeSection(NativeSection.MUSIC) }
+            setOnClickListener { returnSection = null; navFrames.clear(); pendingMusicUserId = null; showNativeSection(NativeSection.MUSIC) }
         }
         findViewById<ImageButton>(R.id.navCommunities).apply {
             setImageBitmap(loadAssetIcon("ui/icons/communities_aero.webp"))
-            setOnClickListener { returnSection = null; showNativeSection(NativeSection.COMMUNITIES) }
+            setOnClickListener { returnSection = null; navFrames.clear(); pendingCommunitiesUserId = null; showNativeSection(NativeSection.COMMUNITIES) }
         }
         findViewById<ImageButton>(R.id.navAddPost).apply {
             setImageBitmap(loadAssetIcon("ui/icons/new_post.webp"))
@@ -639,11 +764,11 @@ class MainActivity : AppCompatActivity() {
         navHomeCenter.setOnClickListener { leaveNative(); webView.loadUrl("$SITE_ORIGIN") }
         findViewById<ImageButton>(R.id.navFriends).apply {
             setImageBitmap(loadAssetIcon("ui/icons/friends_aero.webp"))
-            setOnClickListener { returnSection = null; showNativeSection(NativeSection.FRIENDS) }
+            setOnClickListener { returnSection = null; navFrames.clear(); pendingFriendsUserId = null; showNativeSection(NativeSection.FRIENDS) }
         }
         findViewById<ImageButton>(R.id.navChats).apply {
             setImageBitmap(loadAssetIcon("ui/icons/chats_aero.webp"))
-            setOnClickListener { returnSection = null; showNativeSection(NativeSection.CHATS) }
+            setOnClickListener { returnSection = null; navFrames.clear(); showNativeSection(NativeSection.CHATS) }
         }
     }
 
@@ -669,14 +794,7 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<ImageButton>(R.id.navNotifs).apply {
             setImageBitmap(loadAssetIcon("ui/icons/bell_aero.webp"))
-            setOnClickListener {
-                val js = """
-                    if (typeof openNotificationsPanel === 'function') {
-                        openNotificationsPanel(document.body);
-                    }
-                """.trimIndent()
-                webView.evaluateJavascript(js, null)
-            }
+            setOnClickListener { openNotifications() }
         }
         findViewById<LinearLayout>(R.id.navProfile).setOnClickListener { anchor ->
             if (isLoggedIn == false && !isPublicPath(webView.url)) {
@@ -724,18 +842,21 @@ class MainActivity : AppCompatActivity() {
     private val friendsChrome = SectionChrome("ui/icons/friends_aero.webp", R.string.nav_friends)
     private val communitiesChrome = SectionChrome("ui/icons/communities_aero.webp", R.string.nav_communities)
     private val musicChrome = SectionChrome("ui/icons/audios_aero.webp", R.string.nav_music)
+    private val notifsChrome = SectionChrome("ui/icons/bell_aero.webp", R.string.nav_notifs)
 
     private fun activeSectionChrome(): SectionChrome? = when (nativeSection) {
         NativeSection.CHATS -> chatsChrome
         NativeSection.FRIENDS -> friendsChrome
         NativeSection.COMMUNITIES -> communitiesChrome
         NativeSection.MUSIC -> musicChrome
-        NativeSection.FEED, null -> null // у ленты обычные верхняя и нижняя панели
+        NativeSection.NOTIFS -> notifsChrome
+        NativeSection.FEED, NativeSection.POST, NativeSection.PROFILE, NativeSection.PORT, null -> null // у ленты обычные панели, у поста — стрелка назад
     }
 
     /** Показывает либо обычную верхнюю панель, либо шапку раздела, либо ничего. */
     private fun applyTopChrome(barsVisible: Boolean) {
         val section = if (barsVisible) activeSectionChrome() else null
+        val inPost = barsVisible && nativeSection == NativeSection.POST
         if (section != null) {
             sectionHeaderIcon.setImageBitmap(loadAssetIcon(section.iconAsset))
             sectionHeaderTitle.setText(section.titleRes)
@@ -745,7 +866,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
         sectionHeader.visibility = if (section != null) View.VISIBLE else View.GONE
-        topNavBar.visibility = if (barsVisible && section == null) View.VISIBLE else View.GONE
+        topNavBar.visibility = if (barsVisible && section == null && !inPost) View.VISIBLE else View.GONE
+        postTopBar.visibility = if (inPost) View.VISIBLE else View.GONE
+        // Открытый пост: нижней панели нет, она возвращается после выхода из поста.
+        val inNotifs = barsVisible && nativeSection == NativeSection.NOTIFS
+        notifBottomBar.visibility = if (inNotifs) View.VISIBLE else View.GONE
+        if (paymentWebView == null && barsVisible) bottomNavBar.visibility = if (inPost || inNotifs) View.GONE else View.VISIBLE
         // Загрузка с устройства — только в своей библиотеке.
         sectionHeaderAction.visibility =
             if (section != null && nativeSection == NativeSection.MUSIC && musicController.isOwnLibrary) View.VISIBLE else View.GONE
@@ -850,6 +976,30 @@ class MainActivity : AppCompatActivity() {
                 return
             }
         }
+        if (section != NativeSection.POST && section != NativeSection.PROFILE && section != NativeSection.MUSIC &&
+            section != NativeSection.FRIENDS && section != NativeSection.COMMUNITIES && section != NativeSection.PORT && section != NativeSection.NOTIFS) navFrames.clear()
+        if (section == NativeSection.FRIENDS) {
+            val changed = friendsController.setViewedUser(pendingFriendsUserId)
+            applyListViewMode()
+            if (changed && nativeSection == NativeSection.FRIENDS) { startNativeLoading(); return }
+        }
+        if (section == NativeSection.COMMUNITIES) {
+            val changed = communitiesController.setViewedUser(pendingCommunitiesUserId)
+            applyListViewMode()
+            if (changed && nativeSection == NativeSection.COMMUNITIES) { startNativeLoading(); return }
+        }
+        if (section == NativeSection.POST) {
+            postController.setPost(pendingPostId, pendingPost)
+            if (nativeSection == NativeSection.POST) { postController.stop(); startNativeLoading(); return }
+        }
+        if (section == NativeSection.PORT) {
+            portController.setCommunity(pendingCommunityId)
+            if (nativeSection == NativeSection.PORT) { portController.stop(); startNativeLoading(); return }
+        }
+        if (section == NativeSection.PROFILE) {
+            profileController.setUser(pendingProfileId)
+            if (nativeSection == NativeSection.PROFILE) { profileController.stop(); startNativeLoading(); return }
+        }
         if (nativeSection == section) return
         // Переключение между нативными вкладками: прежнюю останавливаем и прячем.
         stopNativeControllers()
@@ -860,9 +1010,77 @@ class MainActivity : AppCompatActivity() {
         nativeCommunitiesPanel.visibility = if (section == NativeSection.COMMUNITIES) View.VISIBLE else View.GONE
         nativeMusicPanel.visibility = if (section == NativeSection.MUSIC) View.VISIBLE else View.GONE
         nativeFeedPanel.visibility = if (section == NativeSection.FEED) View.VISIBLE else View.GONE
+        nativePostPanel.visibility = if (section == NativeSection.POST) View.VISIBLE else View.GONE
+        nativeProfilePanel.visibility = if (section == NativeSection.PROFILE) View.VISIBLE else View.GONE
+        nativePortPanel.visibility = if (section == NativeSection.PORT) View.VISIBLE else View.GONE
+        nativeNotifsPanel.visibility = if (section == NativeSection.NOTIFS) View.VISIBLE else View.GONE
         updateAddPostButton(currentUrl)
         showBottomNav()
         startNativeLoading()
+    }
+
+    /** Нативная страница поста (концепция 3). [post] — уже загруженная карточка из ленты, чтобы показать её сразу. */
+    private fun openNativePost(id: Long, post: Post?) {
+        if (nativeSection != NativeSection.POST) postParent = nativeSection
+        pendingPostId = id
+        pendingPost = post
+        showNativeSection(NativeSection.POST)
+    }
+
+    /** В списках чужих друзей/портов строка поиска скрыта, список начинается выше. */
+    private fun applyListViewMode() {
+        fun adjust(search: View, recycler: View, viewing: Boolean) {
+            (search.parent as? View)?.visibility = if (viewing) View.GONE else View.VISIBLE
+            val top = (if (viewing) 78 else 136) * resources.displayMetrics.density
+            recycler.setPadding(recycler.paddingLeft, top.toInt(), recycler.paddingRight, recycler.paddingBottom)
+        }
+        adjust(findViewById(R.id.friendsSearch), findViewById(R.id.friendsRecycler), friendsController.viewing)
+        adjust(findViewById(R.id.communitiesSearch), findViewById(R.id.communitiesRecycler), communitiesController.viewing)
+    }
+
+    /** Запоминает текущий нативный экран, чтобы «Назад» из профиля/музыки вернул в него. */
+    private fun pushNavFrame() {
+        val cur = nativeSection ?: return
+        navFrames.add(NavFrame(cur, pendingPostId, postParent, pendingProfileId, pendingCommunityId))
+    }
+
+    /** Нативные уведомления: экран под ними (лента, профиль, порт, пост) остаётся как был. */
+    private fun openNotifications() {
+        if (nativeSection == NativeSection.NOTIFS) { notifsController.refresh(); return }
+        if (nativeSection == null) navFrames.clear()
+        pushNavFrame()
+        showNativeSection(NativeSection.NOTIFS)
+    }
+
+    /** Нативная лента порта (концепция 5). */
+    private fun openNativeCommunity(id: Long) {
+        if (nativeSection == null) navFrames.clear()
+        pushNavFrame()
+        pendingCommunityId = id
+        showNativeSection(NativeSection.PORT)
+    }
+
+    /** Нативный профиль пользователя (концепция 4). */
+    private fun openNativeProfile(id: Long) {
+        if (nativeSection == null) navFrames.clear()
+        pushNavFrame()
+        pendingProfileId = id
+        showNativeSection(NativeSection.PROFILE)
+    }
+
+    /** Возврат на предыдущий нативный экран из стека. false — стек пуст. */
+    private fun popNavFrame(): Boolean {
+        if (navFrames.isEmpty()) return false
+        val f = navFrames.removeAt(navFrames.size - 1)
+        pendingProfileId = f.profileId
+        pendingCommunityId = f.communityId
+        if (f.section == NativeSection.POST) {
+            pendingPostId = f.postId
+            pendingPost = null
+            postParent = f.postParent
+        }
+        showNativeSection(f.section)
+        return true
     }
 
     private fun startNativeLoading() {
@@ -886,6 +1104,10 @@ class MainActivity : AppCompatActivity() {
                 NativeSection.COMMUNITIES -> communitiesController.start(uid, did, ua)
                 NativeSection.MUSIC -> musicController.start(uid, did, ua)
                 NativeSection.FEED -> feedController.start(uid, did, ua)
+                NativeSection.POST -> postController.start(uid, did, ua)
+                NativeSection.PROFILE -> profileController.start(uid, did, ua)
+                NativeSection.PORT -> portController.start(uid, did, ua)
+                NativeSection.NOTIFS -> notifsController.start(uid, did, ua)
                 null -> {}
             }
         }
@@ -900,6 +1122,10 @@ class MainActivity : AppCompatActivity() {
         nativeCommunitiesPanel.visibility = View.GONE
         nativeMusicPanel.visibility = View.GONE
         nativeFeedPanel.visibility = View.GONE
+        nativePostPanel.visibility = View.GONE
+        nativeProfilePanel.visibility = View.GONE
+        nativePortPanel.visibility = View.GONE
+        nativeNotifsPanel.visibility = View.GONE
         stopNativeControllers()
         resetNativeSearch(was)
         updateAddPostButton(currentUrl)
@@ -911,6 +1137,10 @@ class MainActivity : AppCompatActivity() {
         communitiesController.stop()
         musicController.stop()
         feedController.stop()
+        postController.stop()
+        profileController.stop()
+        portController.stop()
+        notifsController.stop()
     }
 
     /** Строка поиска очищается при уходе с вкладки (как при новой загрузке страницы на сайте). */
@@ -925,6 +1155,7 @@ class MainActivity : AppCompatActivity() {
     /** Уход с нативной вкладки на веб-страницу кнопками панели. */
     private fun leaveNative() {
         returnSection = null
+        navFrames.clear()
         hideNativeSection()
     }
 
@@ -939,6 +1170,26 @@ class MainActivity : AppCompatActivity() {
             pendingMusicUserId = id?.takeIf { it.isNotEmpty() } // совпадение с собственным id определяет сам экран
             return NativeSection.MUSIC
         }
+        if (path == "/post") {
+            // Ссылка на пост (из уведомления, чата, JS-роутинга сайта) — нативная страница поста.
+            val id = uri.getQueryParameter("id")?.toLongOrNull() ?: return null
+            pendingPostId = id
+            pendingPost = null
+            return NativeSection.POST
+        }
+        if (path == "/community") {
+            // Страница порта (из уведомления, чата, JS-перехода сайта) — нативная лента порта.
+            val id = uri.getQueryParameter("id")?.toLongOrNull() ?: return null
+            pendingCommunityId = id
+            return NativeSection.PORT
+        }
+        if (path == "/profile") {
+            // Страница пользователя (из меню, уведомления, JS-перехода сайта) — нативная лента пользователя.
+            val id = uri.getQueryParameter("id")
+            if (id != null && !id.all { it.isDigit() }) return null
+            pendingProfileId = id?.toLongOrNull() ?: 0L
+            return NativeSection.PROFILE
+        }
         if (uri.getQueryParameter("chatId") != null || uri.getQueryParameter("id") != null) return null
         // Главная (основная лента). Самую первую загрузку сайта не перехватываем: сначала страница
         // должна открыться, чтобы в WebView появилась сессия (userId/deviceId в localStorage).
@@ -946,6 +1197,8 @@ class MainActivity : AppCompatActivity() {
             val cur = webView.url
             return if (cur.isNullOrEmpty() || cur == "about:blank") null else NativeSection.FEED
         }
+        if (path == "/friends") pendingFriendsUserId = null
+        if (path == "/communities") pendingCommunitiesUserId = null
         return when (path) {
             "/chats" -> NativeSection.CHATS
             "/friends" -> NativeSection.FRIENDS
@@ -1384,7 +1637,30 @@ class MainActivity : AppCompatActivity() {
      * странице (эта функция доступна не на каждом экране сайта) — сначала
      * переходим на ленту и открываем форму сразу после её загрузки.
      */
+    /** Нативное окно нового поста: на ленте (с выбором порта) и на своей странице. */
+    private fun openNativeComposer() {
+        val section = nativeSection
+        val onFeed = section == NativeSection.FEED
+        val onPort = section == NativeSection.PORT
+        val host: PostHost = when {
+            onFeed -> feedController
+            onPort -> portController
+            else -> profileController
+        }
+        PostComposer.show(
+            host = host,
+            pickFile = { done -> commentPickCb = done; commentPicker.launch("*/*") },
+            fixedCommunity = if (onPort) pendingCommunityId else null,
+            allowChoice = onFeed,
+            onPosted = { host.reloadList() }
+        )
+    }
+
     private fun openPostCreator() {
+        if (nativeSection == NativeSection.FEED || nativeSection == NativeSection.PROFILE || nativeSection == NativeSection.PORT) {
+            openNativeComposer()
+            return
+        }
         // Форма поста штатно работает только на ленте. На любой другой вкладке
         // (музыка, чаты и т.д.) её скрипты не подгружены/не готовы и WebView
         // выдаёт ошибку, поэтому сначала переходим на ленту и открываем форму
@@ -1425,7 +1701,10 @@ class MainActivity : AppCompatActivity() {
     private fun updateAddPostButton(url: String?) {
         currentUrl = url
         val path = pathOf(url)
-        val noPost = (nativeSection != null && nativeSection != NativeSection.FEED) || NO_POST_PATH_PREFIXES.any { path == it || path.startsWith("$it/") }
+        val ownProfile = nativeSection == NativeSection.PROFILE &&
+            (pendingProfileId == 0L || pendingProfileId.toString() == siteApi.userId)
+        val portPost = nativeSection == NativeSection.PORT && portController.canPost
+        val noPost = (nativeSection != null && nativeSection != NativeSection.FEED && !ownProfile && !portPost) || NO_POST_PATH_PREFIXES.any { path == it || path.startsWith("$it/") }
         // INVISIBLE (а не GONE) сохраняет ширину кнопки — это и есть пустое место по центру.
         findViewById<View>(R.id.navAddPost).visibility = if (noPost) View.INVISIBLE else View.VISIBLE
         val dividerVis = if (noPost) View.VISIBLE else View.GONE
@@ -1845,15 +2124,62 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
+        if (nativeSection == NativeSection.NOTIFS) {
+            if (popNavFrame()) return
+            hideNativeSection()
+            return
+        }
+        if (nativeSection == NativeSection.PORT) {
+            if (popNavFrame()) return
+            hideNativeSection()
+            if (pathOf(webView.url) == "/community") handleHistoryBack()
+            return
+        }
+        if (nativeSection == NativeSection.PROFILE) {
+            if (popNavFrame()) return
+            hideNativeSection()
+            // Профиль открыли ссылкой/меню/JS-переходом сайта: идём назад по истории WebView.
+            if (pathOf(webView.url) == "/profile") handleHistoryBack()
+            return
+        }
+        if ((nativeSection == NativeSection.MUSIC || nativeSection == NativeSection.FRIENDS ||
+                nativeSection == NativeSection.COMMUNITIES) && navFrames.isNotEmpty()) {
+            if (popNavFrame()) return
+        }
+        if (nativeSection == NativeSection.POST) {
+            val parent = postParent
+            if (parent != null) {
+                postParent = null
+                showNativeSection(parent) // лента остаётся на прежней позиции
+                if (parent == NativeSection.FEED) feedController.refreshCards()
+                if (parent == NativeSection.PROFILE) profileController.refreshCards()
+                if (parent == NativeSection.PORT) portController.refreshCards()
+                return
+            }
+            hideNativeSection()
+            // Пост открыли ссылкой/JS-переходом сайта: если WebView тоже ушёл на /post — идём назад по истории.
+            if (pathOf(webView.url) == "/post") handleHistoryBack()
+            return
+        }
         if (nativeSection != null) {
             hideNativeSection()
             // Под списком может лежать веб-версия /chats или /friends — тогда идём назад по истории.
             if (pathOf(webView.url) !in setOf("/chats", "/friends", "/communities", "/music")) return
-        } else if (returnSection != null && pathOf(webView.url) in setOf("/profile", "/community", "/new_community", "/post")) {
+        } else if (returnSection != null && pathOf(webView.url) in setOf("/profile", "/community", "/new_community", "/post", "/settings", "/friends", "/communities", "/community/settings")) {
             // Профиль/порт открыли из нативного списка — «Назад» возвращает в него.
             val back = returnSection!!
             returnSection = null
-            if (webView.canGoBack()) webView.goBack()
+            if (back == NativeSection.POST) {
+                pendingPostId = postReturnId
+                pendingPost = null
+            }
+            if (back == NativeSection.PROFILE) pendingProfileId = returnProfileId
+            if (back == NativeSection.PORT) pendingCommunityId = returnPortId
+            if (webView.canGoBack()) {
+                // Страница под профилем — главная: её адрес не должен вытеснить вернувшийся пост/профиль лентой.
+                if (back == NativeSection.POST || back == NativeSection.PROFILE || back == NativeSection.PORT) skipNativeNavOnce = true
+                webView.goBack()
+            }
             showNativeSection(back)
             return
         }
@@ -1924,6 +2250,10 @@ class MainActivity : AppCompatActivity() {
         communitiesController.destroy()
         musicController.destroy()
         feedController.destroy()
+        postController.destroy()
+        profileController.destroy()
+        portController.destroy()
+        notifsController.destroy()
         siteApi.destroy()
         paymentWebView?.let { it.stopLoading(); it.destroy() }
         paymentWebView = null

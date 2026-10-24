@@ -182,6 +182,166 @@
 
     </FrameLayout>
 
+    <!-- Нативная лента пользователя (концепция 4): между обычными верхней и нижней панелями. -->
+    <FrameLayout
+        android:id="@+id/nativeProfilePanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#C7EAF5"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/nativeProfileBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:importantForAccessibility="no" />
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/profileSwipe"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/profileRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="8dp"
+                android:paddingTop="78dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="72dp" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    </FrameLayout>
+
+    <!-- Нативная лента порта (концепция 5): между обычными верхней и нижней панелями. -->
+    <FrameLayout
+        android:id="@+id/nativePortPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#C7EAF5"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/nativePortBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:importantForAccessibility="no" />
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/portSwipe"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/portRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="8dp"
+                android:paddingTop="78dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="72dp" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    </FrameLayout>
+
+    <!-- Нативные уведомления: под шапкой раздела, над своей нижней панелью. -->
+    <FrameLayout
+        android:id="@+id/nativeNotifsPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#C7EAF5"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/nativeNotifsBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:importantForAccessibility="no" />
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/notifsSwipe"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/notifsRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="8dp"
+                android:paddingTop="78dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="72dp" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    </FrameLayout>
+
+    <!-- Нативная страница открытого поста: без нижней панели, сверху — стрелка «назад». -->
+    <FrameLayout
+        android:id="@+id/nativePostPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#C7EAF5"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/nativePostBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:importantForAccessibility="no" />
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/postSwipe"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/postRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="8dp"
+                android:paddingTop="78dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="16dp" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    </FrameLayout>
+
     <!-- Нативный список переписок: поверх WebView, под шапкой раздела и нижней панелью. -->
     <FrameLayout
         android:id="@+id/nativeChatsPanel"
@@ -669,6 +829,34 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/postTopBar"
+        android:layout_width="0dp"
+        android:layout_height="70dp"
+        android:background="@color/fp_topbar_bg"
+        android:elevation="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/postBackButton"
+            android:layout_width="56dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_chat_btn"
+            android:contentDescription="Назад"
+            android:gravity="center"
+            android:text="←"
+            android:textColor="#2AF5C0"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/bottomNavBar"
         android:layout_width="0dp"
         android:layout_height="60dp"
@@ -767,6 +955,62 @@
             android:padding="8dp"
             android:scaleType="fitCenter"
             android:contentDescription="@string/nav_chats" />
+
+    </LinearLayout>
+
+    <!-- Нижняя панель уведомлений: «Прочитать всё», «Домой», «Обновить». -->
+    <LinearLayout
+        android:id="@+id/notifBottomBar"
+        android:layout_width="0dp"
+        android:layout_height="60dp"
+        android:background="@color/fp_surface"
+        android:elevation="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/notifReadAll"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Прочитать всё"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="28dp"
+            android:background="#55808080" />
+
+        <ImageButton
+            android:id="@+id/notifHome"
+            android:layout_width="72dp"
+            android:layout_height="52dp"
+            android:background="@android:color/transparent"
+            android:padding="2dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_nav_home"
+            android:contentDescription="@string/nav_home" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="28dp"
+            android:background="#55808080" />
+
+        <TextView
+            android:id="@+id/notifRefresh"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Обновить"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp" />
 
     </LinearLayout>
 

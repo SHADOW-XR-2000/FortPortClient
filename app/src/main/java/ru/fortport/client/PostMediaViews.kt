@@ -17,7 +17,6 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.MediaController
 import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.SeekBar
@@ -37,7 +36,9 @@ import kotlin.math.abs
 class MediaCarouselView(
     context: Context,
     private val api: SiteApi,
-    private val items: List<MediaItem>
+    private val items: List<MediaItem>,
+    /** >0 — фиксированная высота блока (в комментариях): подгрузка картинки не двигает список. */
+    private val fixedHeightDp: Int = 0
 ) : FrameLayout(context) {
 
     private var index = 0
@@ -102,12 +103,17 @@ class MediaCarouselView(
 
     private fun showImage(m: MediaItem) {
         val iv = ImageView(context).apply {
-            adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
-            maxHeight = dp(context, 460)
-            minimumHeight = dp(context, 160)
+            if (fixedHeightDp == 0) {
+                adjustViewBounds = true
+                maxHeight = dp(context, 460)
+                minimumHeight = dp(context, 160)
+            }
         }
-        content.addView(iv, UiUtil.frameLp(UiUtil.MATCH, UiUtil.WRAP, Gravity.CENTER))
+        content.addView(
+            iv,
+            UiUtil.frameLp(UiUtil.MATCH, if (fixedHeightDp > 0) dp(context, fixedHeightDp) else UiUtil.WRAP, Gravity.CENTER)
+        )
         api.loadImage(iv, m.path, 1280)
         if (m.type == "gif") {
             content.addView(
@@ -130,19 +136,65 @@ class MediaCarouselView(
         box.setOnClickListener { startVideo(box, m) }
     }
 
+    /**
+     * Видео с собственными кнопками управления внутри карточки. Системный MediaController
+     * живёт в отдельном окне и не едет вместе с лентой при прокрутке, поэтому не используется.
+     */
     private fun startVideo(box: FrameLayout, m: MediaItem) {
         box.removeAllViews()
-        val vv = VideoView(context)
-        val spinner = ProgressBar(context)
-        box.addView(vv, UiUtil.frameLp(UiUtil.MATCH, dp(context, 260), Gravity.CENTER))
-        box.addView(spinner, UiUtil.frameLp(dp(context, 40), dp(context, 40), Gravity.CENTER))
-        val mc = MediaController(context)
-        mc.setAnchorView(vv)
-        vv.setMediaController(mc)
-        vv.setOnPreparedListener { spinner.visibility = View.GONE; vv.start() }
+        val ctx = context
+        val vv = VideoView(ctx)
+        val spinner = ProgressBar(ctx)
+        box.addView(vv, UiUtil.frameLp(UiUtil.MATCH, dp(ctx, 260), Gravity.CENTER))
+        box.addView(spinner, UiUtil.frameLp(dp(ctx, 40), dp(ctx, 40), Gravity.CENTER))
+
+        val bar = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(0xAA000000.toInt())
+            setPadding(dp(ctx, 8), dp(ctx, 2), dp(ctx, 8), dp(ctx, 2))
+            visibility = View.GONE
+        }
+        val playBtn = TextView(ctx).apply { text = "❚❚"; textSize = 18f; setTextColor(Color.WHITE); gravity = Gravity.CENTER }
+        val seek = SeekBar(ctx).apply { max = 1000 }
+        val time = UiUtil.text(ctx, 12f, Color.WHITE)
+        bar.addView(playBtn, LinearLayout.LayoutParams(dp(ctx, 40), dp(ctx, 40)))
+        bar.addView(seek, UiUtil.lp(0, UiUtil.WRAP, 1f))
+        bar.addView(time)
+        box.addView(bar, UiUtil.frameLp(UiUtil.MATCH, UiUtil.WRAP, Gravity.BOTTOM))
+
+        fun fmt(ms: Int): String { val s = ms / 1000; return "%d:%02d".format(s / 60, s % 60) }
+        var seeking = false
+        val ticker = object : Runnable {
+            override fun run() {
+                if (video !== vv) return
+                try {
+                    val d = vv.duration
+                    if (d > 0) {
+                        if (!seeking) seek.progress = (vv.currentPosition * 1000L / d).toInt()
+                        time.text = fmt(vv.currentPosition) + " / " + fmt(d)
+                    }
+                    playBtn.text = if (vv.isPlaying) "❚❚" else "▶"
+                } catch (_: Exception) {}
+                vv.postDelayed(this, 300)
+            }
+        }
+        playBtn.setOnClickListener { if (vv.isPlaying) vv.pause() else vv.start() }
+        vv.setOnClickListener { bar.visibility = if (bar.visibility == View.VISIBLE) View.GONE else View.VISIBLE }
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar, p: Int, fromUser: Boolean) {}
+            override fun onStartTrackingTouch(s: SeekBar) { seeking = true }
+            override fun onStopTrackingTouch(s: SeekBar) {
+                seeking = false
+                val d = vv.duration
+                if (d > 0) vv.seekTo((d * (s.progress / 1000f)).toInt())
+            }
+        })
+        vv.setOnPreparedListener { spinner.visibility = View.GONE; bar.visibility = View.VISIBLE; vv.start(); vv.post(ticker) }
+        vv.setOnCompletionListener { playBtn.text = "▶" }
         vv.setOnErrorListener { _, _, _ ->
             spinner.visibility = View.GONE
-            Toast.makeText(context, "Не удалось воспроизвести видео", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, "Не удалось воспроизвести видео", Toast.LENGTH_SHORT).show()
             true
         }
         vv.setVideoURI(Uri.parse(api.absUrl(m.path)), api.mediaHeaders())

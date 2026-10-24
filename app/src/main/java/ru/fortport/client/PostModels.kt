@@ -86,7 +86,9 @@ class Post(
     var poll: Poll?,
     val comments: List<PostComment>,
     /** Число комментариев: в ленте порта/пользователя сервер присылает только число, а не массив. */
-    val commentCount: Int
+    var commentCount: Int,
+    /** Заголовок поста: на сайте хранится в начале текста как {title:"…"}. */
+    val title: String = ""
 ) {
     val score: Int get() = likeCount - dislikeCount
 
@@ -177,6 +179,20 @@ object PostParser {
         )
     }
 
+    private val TITLE_RE = Regex(
+        "^\\s*\\{\\s*[\"']?title[\"']?\\s*:\\s*(\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*')\\s*,?\\s*\\}\\s*"
+    )
+
+    /** Отделяет {title:"…"} от начала текста: (заголовок, остальной текст). */
+    fun splitTitle(raw: String): Pair<String, String> {
+        val m = TITLE_RE.find(raw) ?: return "" to raw
+        val q = m.groupValues[1]
+        val title = q.substring(1, q.length - 1)
+            .replace("\\n", "\n").replace("\\\"", "\"").replace("\\'", "'").replace("\\\\", "\\")
+            .trim()
+        return title to raw.substring(m.range.last + 1).trimStart('\n', '\r')
+    }
+
     fun post(o: JSONObject, me: Long): Post {
         val files = strList(o.optJSONArray("files"), o.optJSONArray("files")?.length() ?: 0)
         val types = strList(o.optJSONArray("fileTypes"), files.size)
@@ -193,7 +209,7 @@ object PostParser {
             username = str(o, "username"),
             role = role(o),
             isPinned = o.optBoolean("isPinned", false),
-            content = str(o, "content"),
+            content = splitTitle(str(o, "content")).second,
             files = files,
             fileTypes = types,
             fileIds = ids,
@@ -210,7 +226,8 @@ object PostParser {
             spoilerPreview = str(o, "spoilerPreview"),
             poll = poll(o.optJSONObject("poll")),
             comments = comments,
-            commentCount = (o.opt("comments") as? Number)?.toInt() ?: comments.size
+            commentCount = (o.opt("comments") as? Number)?.toInt() ?: comments.size,
+            title = splitTitle(str(o, "content")).first
         )
     }
 
