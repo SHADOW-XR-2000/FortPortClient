@@ -56,14 +56,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var nativeFriendsPanel: View
     private lateinit var nativeCommunitiesPanel: View
     private lateinit var nativeMusicPanel: View
+    private lateinit var nativeFeedPanel: View
     private lateinit var sectionHeaderAction: ImageButton
     private lateinit var chatsController: ChatsListController
     private lateinit var friendsController: FriendsListController
     private lateinit var communitiesController: CommunitiesListController
     private lateinit var musicController: MusicController
+    private lateinit var feedController: FeedController
 
     /** Нативные экраны, которые показываются поверх WebView вместо веб-страниц /chats и /friends. */
-    private enum class NativeSection { CHATS, FRIENDS, COMMUNITIES, MUSIC }
+    private enum class NativeSection { CHATS, FRIENDS, COMMUNITIES, MUSIC, FEED }
     private var nativeSection: NativeSection? = null
     /** Чья музыка откроется в нативной вкладке: null — своя (выставляется при перехвате /music?id=…). */
     private var pendingMusicUserId: String? = null
@@ -135,6 +137,7 @@ class MainActivity : AppCompatActivity() {
         nativeFriendsPanel = findViewById(R.id.nativeFriendsPanel)
         nativeCommunitiesPanel = findViewById(R.id.nativeCommunitiesPanel)
         nativeMusicPanel = findViewById(R.id.nativeMusicPanel)
+        nativeFeedPanel = findViewById(R.id.nativeFeedPanel)
         sectionHeaderAction = findViewById(R.id.sectionHeaderAction)
         siteApi = SiteApi(this)
         val defaultBg = loadAssetIcon("styles/bg.webp")
@@ -142,6 +145,7 @@ class MainActivity : AppCompatActivity() {
         siteApi.attachBackground(findViewById(R.id.nativeFriendsBg), defaultBg)
         siteApi.attachBackground(findViewById(R.id.nativeCommunitiesBg), defaultBg)
         siteApi.attachBackground(findViewById(R.id.nativeMusicBg), defaultBg)
+        siteApi.attachBackground(findViewById(R.id.nativeFeedBg), defaultBg)
         val openChat: (String) -> Unit = { json ->
             startActivity(Intent(this, ChatActivity::class.java).putExtra(ChatActivity.EXTRA_PAYLOAD, json))
         }
@@ -213,6 +217,30 @@ class MainActivity : AppCompatActivity() {
             btnNext = findViewById(R.id.musicNext),
             btnRepeat = findViewById(R.id.musicRepeat),
             onLibraryChanged = { if (nativeSection == NativeSection.MUSIC) applyTopChrome(barsShouldShow()) },
+            onAuthLost = authLost
+        )
+        feedController = FeedController(
+            activity = this,
+            api = siteApi,
+            swipe = findViewById(R.id.feedSwipe),
+            recycler = findViewById(R.id.feedRecycler),
+            // Нативной страницы поста (концепция 3) пока нет: открываем веб-страницу, «Назад» вернёт в ленту на то же место.
+            onOpenPost = { post ->
+                returnSection = NativeSection.FEED
+                hideNativeSection()
+                webView.loadUrl("$SITE_ORIGIN/post?id=${post.id}")
+            },
+            onOpenProfile = { id ->
+                returnSection = NativeSection.FEED
+                hideNativeSection()
+                webView.loadUrl("$SITE_ORIGIN/profile?id=$id")
+            },
+            onOpenCommunity = { id ->
+                returnSection = NativeSection.FEED
+                hideNativeSection()
+                webView.loadUrl("$SITE_ORIGIN/community?id=$id")
+            },
+            onBalanceChanged = { refreshCdCoinsBalance() },
             onAuthLost = authLost
         )
         sectionHeaderAction.setOnClickListener { musicController.pickFromDevice() }
@@ -352,6 +380,8 @@ class MainActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
                 progressBar.visibility = View.GONE
                 swipeRefresh.isRefreshing = false
+                // Лента открылась поверх только что загруженной главной: сессия сайта (userId/deviceId) теперь точно доступна.
+                if (nativeSection == NativeSection.FEED) startNativeLoading()
 
                 // lastLoadFailed может быть true даже если сеть на устройстве есть —
                 // например, когда сам сервер сейчас не отвечает (не наш случай
@@ -700,7 +730,7 @@ class MainActivity : AppCompatActivity() {
         NativeSection.FRIENDS -> friendsChrome
         NativeSection.COMMUNITIES -> communitiesChrome
         NativeSection.MUSIC -> musicChrome
-        null -> null
+        NativeSection.FEED, null -> null // у ленты обычные верхняя и нижняя панели
     }
 
     /** Показывает либо обычную верхнюю панель, либо шапку раздела, либо ничего. */
@@ -829,6 +859,7 @@ class MainActivity : AppCompatActivity() {
         nativeFriendsPanel.visibility = if (section == NativeSection.FRIENDS) View.VISIBLE else View.GONE
         nativeCommunitiesPanel.visibility = if (section == NativeSection.COMMUNITIES) View.VISIBLE else View.GONE
         nativeMusicPanel.visibility = if (section == NativeSection.MUSIC) View.VISIBLE else View.GONE
+        nativeFeedPanel.visibility = if (section == NativeSection.FEED) View.VISIBLE else View.GONE
         updateAddPostButton(currentUrl)
         showBottomNav()
         startNativeLoading()
@@ -854,6 +885,7 @@ class MainActivity : AppCompatActivity() {
                 NativeSection.FRIENDS -> friendsController.start(uid, did, ua)
                 NativeSection.COMMUNITIES -> communitiesController.start(uid, did, ua)
                 NativeSection.MUSIC -> musicController.start(uid, did, ua)
+                NativeSection.FEED -> feedController.start(uid, did, ua)
                 null -> {}
             }
         }
@@ -867,6 +899,7 @@ class MainActivity : AppCompatActivity() {
         nativeFriendsPanel.visibility = View.GONE
         nativeCommunitiesPanel.visibility = View.GONE
         nativeMusicPanel.visibility = View.GONE
+        nativeFeedPanel.visibility = View.GONE
         stopNativeControllers()
         resetNativeSearch(was)
         updateAddPostButton(currentUrl)
@@ -877,6 +910,7 @@ class MainActivity : AppCompatActivity() {
         friendsController.stop()
         communitiesController.stop()
         musicController.stop()
+        feedController.stop()
     }
 
     /** Строка поиска очищается при уходе с вкладки (как при новой загрузке страницы на сайте). */
@@ -906,6 +940,12 @@ class MainActivity : AppCompatActivity() {
             return NativeSection.MUSIC
         }
         if (uri.getQueryParameter("chatId") != null || uri.getQueryParameter("id") != null) return null
+        // Главная (основная лента). Самую первую загрузку сайта не перехватываем: сначала страница
+        // должна открыться, чтобы в WebView появилась сессия (userId/deviceId в localStorage).
+        if (path.isEmpty()) {
+            val cur = webView.url
+            return if (cur.isNullOrEmpty() || cur == "about:blank") null else NativeSection.FEED
+        }
         return when (path) {
             "/chats" -> NativeSection.CHATS
             "/friends" -> NativeSection.FRIENDS
@@ -1385,7 +1425,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateAddPostButton(url: String?) {
         currentUrl = url
         val path = pathOf(url)
-        val noPost = nativeSection != null || NO_POST_PATH_PREFIXES.any { path == it || path.startsWith("$it/") }
+        val noPost = (nativeSection != null && nativeSection != NativeSection.FEED) || NO_POST_PATH_PREFIXES.any { path == it || path.startsWith("$it/") }
         // INVISIBLE (а не GONE) сохраняет ширину кнопки — это и есть пустое место по центру.
         findViewById<View>(R.id.navAddPost).visibility = if (noPost) View.INVISIBLE else View.VISIBLE
         val dividerVis = if (noPost) View.VISIBLE else View.GONE
@@ -1809,7 +1849,7 @@ class MainActivity : AppCompatActivity() {
             hideNativeSection()
             // Под списком может лежать веб-версия /chats или /friends — тогда идём назад по истории.
             if (pathOf(webView.url) !in setOf("/chats", "/friends", "/communities", "/music")) return
-        } else if (returnSection != null && pathOf(webView.url) in setOf("/profile", "/community", "/new_community")) {
+        } else if (returnSection != null && pathOf(webView.url) in setOf("/profile", "/community", "/new_community", "/post")) {
             // Профиль/порт открыли из нативного списка — «Назад» возвращает в него.
             val back = returnSection!!
             returnSection = null
@@ -1883,6 +1923,7 @@ class MainActivity : AppCompatActivity() {
         friendsController.destroy()
         communitiesController.destroy()
         musicController.destroy()
+        feedController.destroy()
         siteApi.destroy()
         paymentWebView?.let { it.stopLoading(); it.destroy() }
         paymentWebView = null
