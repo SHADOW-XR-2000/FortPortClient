@@ -84,57 +84,39 @@ class SiteApi(private val activity: AppCompatActivity) {
         client.newCall(req).execute().use { return Resp(it.code, it.body?.string().orEmpty()) }
     }
 
-    enum class SessionState { VALID, INVALID, UNKNOWN }
-
-    /**
-     * Одна проверка сессии. INVALID — только при однозначном ответе сервера (401 или authenticated=false).
-     * Сетевые ошибки, тайм-ауты, 5xx, 403/429 (защита/ограничение частоты), не-JSON — UNKNOWN: это не «вышел».
-     * Set-Cookie ответа попадает в CookieManager через интерсептор клиента.
-     */
-    fun checkSession(): SessionState = try {
-        val r = get("/api/session/bootstrap")
-        when {
-            r.code == 401 -> invalidOrUnknown()
-            r.code != 200 -> SessionState.UNKNOWN
-            else -> {
-                val o = JSONObject(r.body)
-                if (!o.optBoolean("authenticated", false)) invalidOrUnknown()
-                else {
-                    val id = o.optJSONObject("user")?.optLong("id", 0L) ?: 0L
-                    if (id > 0 && userId.isBlank()) userId = id.toString()
-                    SessionState.VALID
-                }
-            }
-        }
-    } catch (e: Exception) { SessionState.UNKNOWN }
-
-    /**
-     * Без X-Device-Id (localStorage ещё не прочитан) сервер мог ответить «не авторизован» лишь потому, что
-     * мы не назвали устройство. Если при этом куки есть — это не доказательство выхода (UNKNOWN).
-     */
-    private fun invalidOrUnknown(): SessionState =
-        if (deviceId.isBlank() && !CookieManager.getInstance().getCookie(ORIGIN).isNullOrBlank()) SessionState.UNKNOWN
-        else SessionState.INVALID
-
-    /** INVALID возвращается, только если все попытки подряд (с паузой) вернули INVALID. Блокирующий, вызывать не из UI. */
-    fun checkSessionConfirmed(attempts: Int = 3, delayMs: Long = 1500): SessionState {
-        var state = SessionState.UNKNOWN
-        for (i in 0 until attempts) {
-            state = checkSession()
-            if (state != SessionState.INVALID) return state
-            if (i < attempts - 1) try { Thread.sleep(delayMs * (i + 1)) } catch (e: InterruptedException) { return SessionState.UNKNOWN }
-        }
-        return state
-    }
-
-    /** 0 — id известен, 1 — нет авторизации (подтверждает сервер), 2 — ошибка сети/сервера. */
+    /** 0 — id известен, 1 — нет авторизации, 2 — ошибка сети/сервера. */
     fun ensureUserId(): Int {
         if (userId.isNotBlank()) return if (userId.all { it.isDigit() }) 0 else 2
-        return when (checkSession()) {
-            SessionState.INVALID -> 1
-            SessionState.UNKNOWN -> 2
-            SessionState.VALID -> if (userId.isNotBlank()) 0 else 2
+        val r = get("/api/session/bootstrap")
+        // Только 401 считается однозначным отсутствием авторизации.
+        // 403 может быть ответом WAF/прав доступа и не должен разлогинивать пользователя.
+        if (r.code == 401) return 1
+        if (r.code != 200) return 2
+        val o = JSONObject(r.body)
+        if (!o.optBoolean("authenticated", false)) return 1
+        val id = o.optJSONObject("user")?.optLong("id", 0L) ?: 0L
+        if (id <= 0) return 2
+        userId = id.toString()
+        return 0
+    }
+
+    /**
+     * Подтверждает, что сессия действительно недействительна.
+     * Сетевые ошибки, 403 (например, блокировка WAF) и 5xx означают
+     * неизвестное состояние, а не выход пользователя.
+     */
+    fun confirmSessionInvalid(): Boolean = try {
+        val r = get("/api/session/bootstrap")
+        when {
+            r.code == 401 -> true
+            r.code != 200 -> false
+            else -> {
+                val o = JSONObject(r.body)
+                o.has("authenticated") && !o.optBoolean("authenticated", false)
+            }
         }
+    } catch (_: Exception) {
+        false
     }
 
     fun absUrl(path: String): String = when {

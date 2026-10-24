@@ -271,23 +271,6 @@ class ChatActivity : AppCompatActivity() {
         runOnUiThread { if (!isFinishing && !isDestroyed) block() }
     }
 
-    /** true — сервер трижды подряд однозначно сказал «не авторизован». Сеть/5xx/403/не-JSON — не повод выходить. Не из UI-потока. */
-    private fun sessionReallyLost(): Boolean {
-        for (i in 0 until 3) {
-            val invalid = try {
-                val r = get("/api/session/bootstrap")
-                when {
-                    r.code == 401 -> true
-                    r.code == 200 -> !JSONObject(r.body).optBoolean("authenticated", false)
-                    else -> return false
-                }
-            } catch (e: Exception) { return false }
-            if (!invalid) return false
-            if (i < 2) try { Thread.sleep(1500L * (i + 1)) } catch (e: InterruptedException) { return false }
-        }
-        return true
-    }
-
     private fun onAuthLost() = main {
         Toast.makeText(this, "Сессия недействительна. Войдите заново.", Toast.LENGTH_LONG).show()
         finish()
@@ -359,10 +342,7 @@ class ChatActivity : AppCompatActivity() {
         io.execute {
             try {
                 val r = get("/api/chats/messages/$chatId")
-                if (r.code == 401 || r.code == 403) {
-                    if (sessionReallyLost()) { onAuthLost(); return@execute }
-                    throw IOException("HTTP ${r.code}") // временный сбой: не выходим, дальше сработает long-poll с повторами
-                }
+                if (r.code == 401 || r.code == 403) { onAuthLost(); return@execute }
                 if (r.code !in 200..299) throw IOException("HTTP ${r.code}")
                 val page = parseMessages(r.body)
                 main {
@@ -467,10 +447,7 @@ class ChatActivity : AppCompatActivity() {
                     )
                     pollCall = call
                     call.execute().use { r ->
-                        if (r.code == 401 || r.code == 403) {
-                            if (sessionReallyLost()) { onAuthLost(); active = false; return@use }
-                            throw IOException("HTTP ${r.code}") // повтор с нарастающей паузой
-                        }
+                        if (r.code == 401 || r.code == 403) { onAuthLost(); active = false; return@use }
                         if (r.code == 204) { failures = 0; return@use }
                         if (r.code !in 200..299) throw IOException("HTTP ${r.code}")
                         failures = 0
