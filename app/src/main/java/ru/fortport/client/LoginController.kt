@@ -21,7 +21,8 @@ import org.json.JSONObject
 
 /**
  * Нативная форма входа поверх страницы /login: логин/пароль, код 2FA, «нужна почта» /
- * «подтвердите почту» и плашки сохранённых аккаунтов для автозаполнения.
+ * «подтвердите почту», регистрация, восстановление пароля (почта → код → новый пароль)
+ * и плашки сохранённых аккаунтов для автозаполнения.
  */
 class LoginController(
     private val activity: AppCompatActivity,
@@ -29,7 +30,7 @@ class LoginController(
     root: ViewGroup,
     /** Вход выполнен: данные пользователя из ответа сервера. */
     private val onLoggedIn: (JSONObject) -> Unit,
-    /** Открыть веб-страницу сайта (регистрация, сброс пароля). */
+    /** Открыть веб-страницу сайта (больше не используется формами регистрации/сброса — они нативные). */
     private val onOpenWeb: (String) -> Unit
 ) {
     private val ctx = activity
@@ -116,11 +117,14 @@ class LoginController(
         background = UiUtil.rect(Color.WHITE, 0xFFBCCEE2.toInt(), 2, 12, ctx)
     }
 
-    private fun field(hint: String, password: Boolean): EditText = EditText(ctx).apply {
+    private fun field(hint: String, password: Boolean, plain: Boolean = false): EditText = EditText(ctx).apply {
         this.hint = hint
         setSingleLine(true)
-        inputType = if (password) InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        inputType = when {
+            password -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            plain -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        }
         textSize = 16f
         setTextColor(Color.BLACK)
         setHintTextColor(0xFF888888.toInt())
@@ -173,7 +177,7 @@ class LoginController(
         content.tag = mode
     }
 
-    private fun showLoginForm(error: String, autoLogin: Boolean = false) {
+    private fun showLoginForm(error: String, autoLogin: Boolean = false, info: String = "") {
         reset("login")
         val c = card()
         c.addView(title("Вход"))
@@ -191,10 +195,11 @@ class LoginController(
         }
         val btn = primaryButton("Войти")
         c.addView(ident); c.addView(pass); c.addView(rememberBox); c.addView(msg); c.addView(btn)
-        c.addView(linkText("Забыли пароль?") { onOpenWeb("/reset-password") })
-        c.addView(linkText("Нет аккаунта? Зарегистрироваться") { onOpenWeb("/register") })
+        c.addView(linkText("Забыли пароль?") { showResetEmail() })
+        c.addView(linkText("Нет аккаунта? Зарегистрироваться") { showRegister() })
         content.addView(c)
         if (error.isNotEmpty()) showMsg(msg, error)
+        else if (info.isNotEmpty()) showMsg(msg, info, ok = true)
 
         val submit = {
             val i = ident.text.toString().trim()
@@ -502,6 +507,312 @@ class LoginController(
                 api.str(o, "message") + ". Откройте её, чтобы указать новую почту."
             }
         }
+    }
+
+    // ------------------------------------------------------------------ регистрация
+
+    private val emailRegex = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
+    private var pendingUserId = ""
+    private var pendingEmail = ""
+
+    private fun openExternal(path: String) {
+        try {
+            ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse(SiteApi.ORIGIN + path)))
+        } catch (e: Exception) { }
+    }
+
+    /** Чекбокс с кликабельной ссылкой («Я принимаю Условия использования»). */
+    private fun agreeBox(prefix: String, linkLabel: String, path: String): CheckBox = CheckBox(ctx).apply {
+        val sp = android.text.SpannableString("$prefix$linkLabel")
+        sp.setSpan(object : android.text.style.ClickableSpan() {
+            override fun onClick(widget: View) { openExternal(path) }
+            override fun updateDrawState(ds: android.text.TextPaint) {
+                ds.color = 0xFF2A62B8.toInt()
+                ds.isUnderlineText = false
+            }
+        }, prefix.length, sp.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        text = sp
+        movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        setTextColor(0xFF333333.toInt())
+        textSize = 13f
+    }
+
+    private fun showRegister(error: String = "") {
+        reset("mode_other")
+        val c = card()
+        c.addView(title("Создание аккаунта"))
+        val username = field("Имя пользователя", false, plain = true)
+        val email = field("Email", false)
+        val pass = field("Пароль (минимум 7 символов)", true)
+        val confirm = field("Подтвердите пароль", true)
+        val terms = agreeBox("Я принимаю ", "Условия использования", "/terms")
+        val privacy = agreeBox("Я принимаю ", "Политику конфиденциальности", "/privacy")
+        val msg = message()
+        val btn = primaryButton("Зарегистрироваться")
+        c.addView(username); c.addView(email); c.addView(pass); c.addView(confirm)
+        c.addView(terms); c.addView(privacy); c.addView(msg); c.addView(btn)
+        c.addView(linkText("Уже есть аккаунт? Войти") { showLoginForm("") })
+        content.addView(c)
+        if (error.isNotEmpty()) showMsg(msg, error)
+
+        val submit = {
+            val u = username.text.toString().trim()
+            val e = email.text.toString().trim()
+            val p = pass.text.toString()
+            val p2 = confirm.text.toString()
+            val problem = when {
+                u.isEmpty() || e.isEmpty() || p.isEmpty() || p2.isEmpty() -> "Заполните все поля"
+                p != p2 -> "Пароли не совпадают"
+                p.length < 7 -> "Пароль должен быть минимум 7 символов"
+                !emailRegex.matches(e) -> "Введите корректный email адрес"
+                !terms.isChecked || !privacy.isChecked -> "Примите условия использования и политику конфиденциальности"
+                else -> ""
+            }
+            if (problem.isNotEmpty()) {
+                showMsg(msg, problem)
+            } else if (!busy) {
+                hideKeyboard()
+                setBusy(true, btn, "Зарегистрироваться")
+                showMsg(msg, "")
+                val payload = JSONObject().put("username", u).put("email", e).put("password", p).toString()
+                api.io.execute {
+                    var r: SiteApi.Resp? = null
+                    try { r = api.send("POST", "/api/register", payload) } catch (ex: Exception) { }
+                    activity.runOnUiThread {
+                        if (destroyed) return@runOnUiThread
+                        setBusy(false, btn, "Зарегистрироваться")
+                        if (r == null) { showMsg(msg, "Нет связи с сервером"); return@runOnUiThread }
+                        val o = parse(r.body)
+                        if (o == null) { showMsg(msg, "Ошибка сервера"); return@runOnUiThread }
+                        if (r.code !in 200..299 || !o.optBoolean("success", false)) {
+                            showMsg(msg, api.str(o, "error").ifEmpty { "Ошибка регистрации" })
+                            return@runOnUiThread
+                        }
+                        pendingUserId = o.opt("userId")?.toString().orEmpty().let { if (it == "null") "" else it }
+                        pendingEmail = e
+                        if (o.optBoolean("requiresVerification", true)) {
+                            showRegisterVerification(api.str(o, "message"))
+                        } else {
+                            lastIdentifier = u
+                            lastPassword = ""
+                            showLoginForm("", info = api.str(o, "message").ifEmpty { "Регистрация успешна! Войдите." })
+                        }
+                    }
+                }
+            }
+        }
+        btn.setOnClickListener { submit() }
+        confirm.setOnEditorActionListener { _, _, _ -> submit(); true }
+    }
+
+    /** После регистрации: «Мы отправили письмо…» + повторная отправка (POST /api/resend-verification {userId,email}). */
+    private fun showRegisterVerification(serverMessage: String) {
+        reset("mode_other")
+        val c = card()
+        c.addView(title("Подтверждение email"))
+        if (serverMessage.isNotEmpty()) {
+            c.addView(UiUtil.text(ctx, 14f, 0xFF1E8E3E.toInt()).apply {
+                text = serverMessage
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, dp(8))
+            })
+        }
+        c.addView(UiUtil.text(ctx, 14f, 0xFF333333.toInt()).apply {
+            text = "Мы отправили письмо на $pendingEmail\nПерейдите по ссылке в письме, чтобы завершить регистрацию."
+            gravity = Gravity.CENTER
+        })
+        val status = message()
+        val resend = primaryButton("Отправить письмо снова")
+        c.addView(status); c.addView(resend)
+        c.addView(linkText("Перейти ко входу") {
+            lastIdentifier = pendingEmail
+            lastPassword = ""
+            showLoginForm("")
+        })
+        content.addView(c)
+        resend.setOnClickListener {
+            if (pendingUserId.isEmpty() || pendingEmail.isEmpty()) {
+                showMsg(status, "Данные не найдены. Попробуйте зарегистрироваться снова.")
+            } else if (!busy) {
+                setBusy(true, resend, "Отправить письмо снова")
+                showMsg(status, "")
+                val payload = JSONObject().put("userId", pendingUserId).put("email", pendingEmail).toString()
+                api.io.execute {
+                    var r: SiteApi.Resp? = null
+                    try { r = api.send("POST", "/api/resend-verification", payload) } catch (ex: Exception) { }
+                    activity.runOnUiThread {
+                        if (destroyed) return@runOnUiThread
+                        setBusy(false, resend, "Отправить письмо снова")
+                        if (r == null) { showMsg(status, "Нет связи с сервером"); return@runOnUiThread }
+                        val o = parse(r.body)
+                        if (o == null) { showMsg(status, "Ошибка сервера"); return@runOnUiThread }
+                        if (r.code in 200..299 && o.optBoolean("success", false)) {
+                            showMsg(status, api.str(o, "message").ifEmpty { "Новое письмо отправлено! Проверьте почту." }, ok = true)
+                        } else {
+                            showMsg(status, api.str(o, "error").ifEmpty { "Не удалось отправить письмо" })
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ восстановление пароля
+
+    private var resetEmail = ""
+    private var resetCode = ""
+    private var lastResetSentAt = 0L
+
+    /** Универсальный POST шага сброса: success → onOk, иначе текст ошибки в msg. */
+    private fun resetCall(
+        path: String, payload: JSONObject, msg: TextView, btn: Button, label: String, onOk: (JSONObject) -> Unit
+    ) {
+        if (busy) return
+        hideKeyboard()
+        setBusy(true, btn, label)
+        showMsg(msg, "")
+        api.io.execute {
+            var r: SiteApi.Resp? = null
+            try { r = api.send("POST", path, payload.toString()) } catch (ex: Exception) { }
+            activity.runOnUiThread {
+                if (destroyed) return@runOnUiThread
+                setBusy(false, btn, label)
+                if (r == null) { showMsg(msg, "Нет связи с сервером"); return@runOnUiThread }
+                val o = parse(r.body)
+                if (o == null) { showMsg(msg, "Сервер вернул некорректный ответ"); return@runOnUiThread }
+                if (r.code !in 200..299 || !o.optBoolean("success", false)) {
+                    showMsg(msg, api.str(o, "error").ifEmpty { "Ошибка ${r.code}" })
+                    return@runOnUiThread
+                }
+                onOk(o)
+            }
+        }
+    }
+
+    /** Шаг 1: почта → POST /api/send-reset-code {email}. */
+    private fun showResetEmail() {
+        reset("mode_other")
+        val c = card()
+        c.addView(title("Сброс пароля"))
+        c.addView(UiUtil.text(ctx, 14f, 0xFF555555.toInt()).apply {
+            text = "Введите почту аккаунта — мы отправим код для сброса пароля."
+            gravity = Gravity.CENTER
+        })
+        val email = field("example@mail.com", false)
+        if (resetEmail.isNotEmpty()) email.setText(resetEmail)
+        else if (lastIdentifier.contains("@")) email.setText(lastIdentifier)
+        val msg = message()
+        val btn = primaryButton("Получить код")
+        c.addView(email); c.addView(msg); c.addView(btn)
+        c.addView(linkText("Вернуться ко входу") { showLoginForm("") })
+        c.addView(linkText("Нет аккаунта? Зарегистрироваться") { showRegister() })
+        content.addView(c)
+        val submit = {
+            val e = email.text.toString().trim()
+            if (e.isEmpty()) {
+                showMsg(msg, "Заполните все поля")
+            } else {
+                resetCall("/api/send-reset-code", JSONObject().put("email", e), msg, btn, "Получить код") {
+                    resetEmail = e
+                    lastResetSentAt = System.currentTimeMillis()
+                    showResetCode(info = "Код был отправлен на почту, если письма не видно, проверьте спам")
+                }
+            }
+        }
+        btn.setOnClickListener { submit() }
+        email.setOnEditorActionListener { _, _, _ -> submit(); true }
+    }
+
+    /** Шаг 2: код из письма → POST /api/verify-reset-code {code,email}. */
+    private fun showResetCode(info: String = "") {
+        reset("mode_other")
+        val c = card()
+        c.addView(title("Введите код"))
+        c.addView(UiUtil.text(ctx, 14f, 0xFF555555.toInt()).apply {
+            text = "Код отправлен на $resetEmail"
+            gravity = Gravity.CENTER
+        })
+        val code = field("Код из письма", false, plain = true).apply {
+            filters = arrayOf(android.text.InputFilter.LengthFilter(64))
+            gravity = Gravity.CENTER
+            textSize = 20f
+        }
+        val msg = message()
+        if (info.isNotEmpty()) showMsg(msg, info, ok = true)
+        val btn = primaryButton("Подтвердить код")
+        c.addView(code); c.addView(msg); c.addView(btn)
+        val resend = linkText("Отправить код снова") { }
+        resend.setOnClickListener {
+            val wait = 30_000L - (System.currentTimeMillis() - lastResetSentAt)
+            if (wait > 0) {
+                showMsg(msg, "Повторно отправить код можно через ${(wait + 999) / 1000} с")
+            } else if (!busy) {
+                resetCall("/api/send-reset-code", JSONObject().put("email", resetEmail), msg, btn, "Подтвердить код") {
+                    lastResetSentAt = System.currentTimeMillis()
+                    showMsg(msg, "Новый код отправлен, проверьте почту (и спам)", ok = true)
+                }
+            }
+        }
+        c.addView(resend)
+        c.addView(linkText("Изменить почту") { showResetEmail() })
+        content.addView(c)
+        code.requestFocus()
+        val submit = {
+            val v = code.text.toString().trim()
+            if (v.isEmpty()) {
+                showMsg(msg, "Введите код из письма")
+            } else if (!v.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' }) {
+                showMsg(msg, "Код может содержать только латинские буквы и цифры")
+            } else {
+                resetCall("/api/verify-reset-code", JSONObject().put("code", v).put("email", resetEmail), msg, btn, "Подтвердить код") {
+                    resetCode = v
+                    showResetPassword()
+                }
+            }
+        }
+        btn.setOnClickListener { submit() }
+        code.setOnEditorActionListener { _, _, _ -> submit(); true }
+    }
+
+    /** Шаг 3: новый пароль → POST /api/reset-password {code,email,password}; затем — вход. */
+    private fun showResetPassword() {
+        reset("mode_other")
+        val c = card()
+        c.addView(title("Новый пароль"))
+        c.addView(UiUtil.text(ctx, 14f, 0xFF555555.toInt()).apply {
+            text = "Введите новый надёжный пароль (минимум 7 символов)."
+            gravity = Gravity.CENTER
+        })
+        val pass = field("Новый пароль", true)
+        val confirm = field("Повторите пароль", true)
+        val msg = message()
+        val btn = primaryButton("Подтвердить")
+        c.addView(pass); c.addView(confirm); c.addView(msg); c.addView(btn)
+        c.addView(linkText("Отмена") { resetCode = ""; showLoginForm("") })
+        content.addView(c)
+        pass.requestFocus()
+        val submit = {
+            val p = pass.text.toString().trim()
+            val p2 = confirm.text.toString().trim()
+            when {
+                p.isEmpty() -> showMsg(msg, "Заполните все поля")
+                p.length < 7 -> showMsg(msg, "Пароль должен быть минимум 7 символов")
+                p != p2 -> showMsg(msg, "Пароли не совпадают")
+                else -> resetCall(
+                    "/api/reset-password",
+                    JSONObject().put("code", resetCode).put("email", resetEmail).put("password", p),
+                    msg, btn, "Подтвердить"
+                ) {
+                    lastIdentifier = resetEmail
+                    lastPassword = ""
+                    resetCode = ""
+                    showLoginForm("", info = "Пароль изменён. Войдите с новым паролем.")
+                }
+            }
+        }
+        btn.setOnClickListener { submit() }
+        confirm.setOnEditorActionListener { _, _, _ -> submit(); true }
     }
 
     private fun hideKeyboard() {
