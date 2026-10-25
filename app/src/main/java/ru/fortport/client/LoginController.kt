@@ -37,6 +37,7 @@ class LoginController(
     private val saved = SavedAccounts(activity)
 
     private val overlay = FrameLayout(ctx)
+    private val bgImage = ImageView(ctx)
     private val content = LinearLayout(ctx)
     private val platesBox = LinearLayout(ctx)
     private val platesTitle: TextView
@@ -52,8 +53,31 @@ class LoginController(
 
     private fun dp(v: Int) = UiUtil.dp(ctx, v)
 
+    // Палитра с учётом тёмной темы (смена темы пересоздаёт Activity, поэтому достаточно один раз).
+    private val night = (ctx.resources.configuration.uiMode and
+        android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+    private val cCard = ctx.getColor(R.color.fp_chat_card_bg)           // полупрозрачная плашка
+    private val cCardStroke = ctx.getColor(R.color.fp_chat_card_stroke)
+    private val cText = if (night) 0xFFF2F2F2.toInt() else 0xFF15141C.toInt()
+    private val cSub = if (night) 0xFFBDBDBD.toInt() else 0xFF555555.toInt()
+    private val cHint = if (night) 0xFF9AA0AE.toInt() else 0xFF777777.toInt()
+    private val cField = if (night) 0x99141A28.toInt() else 0xB3EDEFF4.toInt()
+    private val cFieldStroke = if (night) 0xCC394057.toInt() else 0xCCBCCEE2.toInt()
+    private val cLink = if (night) 0xFF8FB4FF.toInt() else 0xFF2A62B8.toInt()
+    private val cBtn = if (night) 0xCC2B4A6B.toInt() else 0xE6BEF1FC.toInt()
+    private val cBtnStroke = if (night) 0xFF4A78A6.toInt() else 0xFF8CC9D8.toInt()
+    private val cBtnText = if (night) Color.WHITE else Color.BLACK
+    private val cErr = if (night) 0xFFFF7B7B.toInt() else 0xFFD02020.toInt()
+    private val cOk = if (night) 0xFF6FDC9A.toInt() else 0xFF1E8E3E.toInt()
+
     init {
-        overlay.setBackgroundColor(0xFFEDEFF4.toInt())
+        overlay.setBackgroundColor(if (night) 0xFF121212.toInt() else 0xFFEDEFF4.toInt())
+        bgImage.scaleType = ImageView.ScaleType.CENTER_CROP
+        overlay.addView(bgImage, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        // затемнение фона в тёмной теме, чтобы плашки и текст читались
+        overlay.addView(View(ctx).apply { setBackgroundColor(if (night) 0x80000000.toInt() else 0x00000000) },
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        loadBackground()
         overlay.visibility = View.GONE
         overlay.isClickable = true
         overlay.elevation = 20f * ctx.resources.displayMetrics.density
@@ -68,7 +92,7 @@ class LoginController(
         overlay.addView(scroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.addView(overlay)
 
-        platesTitle = UiUtil.text(ctx, 14f, 0xFF555555.toInt(), true).apply {
+        platesTitle = UiUtil.text(ctx, 14f, cSub, true).apply {
             text = "Сохранённые аккаунты"
             setPadding(dp(4), dp(24), 0, dp(8))
         }
@@ -80,6 +104,32 @@ class LoginController(
         if (destroyed) return
         overlay.visibility = View.VISIBLE
         if (challengeId == null) refreshPlates()
+    }
+
+    /** Фон как на сайте (reglogin_bg.webp): сначала кэш/стандартный из assets, затем пробуем скачать. */
+    private fun loadBackground() {
+        val file = java.io.File(ctx.cacheDir, "login_bg.bin")
+        var shown = false
+        if (file.exists()) {
+            try { api.decodeSampled(file.readBytes(), 1600)?.let { bgImage.setImageBitmap(it); shown = true } } catch (e: Exception) { }
+        }
+        if (!shown) {
+            try { ctx.assets.open("styles/bg.webp").use { android.graphics.BitmapFactory.decodeStream(it) }
+                ?.let { bgImage.setImageBitmap(it) } } catch (e: Exception) { }
+        }
+        if (shown) return
+        api.io.execute {
+            try {
+                val r = api.client.newCall(okhttp3.Request.Builder().url(SiteApi.ORIGIN + "/reglogin_bg.webp").get().build()).execute()
+                r.use { resp ->
+                    if (!resp.isSuccessful) return@execute
+                    val bytes = resp.body?.bytes() ?: return@execute
+                    val bmp = api.decodeSampled(bytes, 1600) ?: return@execute
+                    file.writeBytes(bytes)
+                    activity.runOnUiThread { if (!destroyed) bgImage.setImageBitmap(bmp) }
+                }
+            } catch (e: Exception) { }
+        }
     }
 
     fun hide() {
@@ -114,7 +164,7 @@ class LoginController(
     private fun card(): LinearLayout = LinearLayout(ctx).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(18), dp(18), dp(18), dp(18))
-        background = UiUtil.rect(Color.WHITE, 0xFFBCCEE2.toInt(), 2, 12, ctx)
+        background = UiUtil.rect(cCard, cCardStroke, 2, 12, ctx)
     }
 
     private fun field(hint: String, password: Boolean, plain: Boolean = false): EditText = EditText(ctx).apply {
@@ -126,10 +176,10 @@ class LoginController(
             else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
         }
         textSize = 16f
-        setTextColor(Color.BLACK)
-        setHintTextColor(0xFF888888.toInt())
+        setTextColor(cText)
+        setHintTextColor(cHint)
         setPadding(dp(12), dp(12), dp(12), dp(12))
-        background = UiUtil.rect(0xFFEDEFF4.toInt(), 0xFFBCCEE2.toInt(), 2, 8, ctx)
+        background = UiUtil.rect(cField, cFieldStroke, 2, 8, ctx)
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = dp(10)
         }
@@ -140,13 +190,13 @@ class LoginController(
         isAllCaps = false
         textSize = 16f
         setTypeface(typeface, Typeface.BOLD)
-        setTextColor(Color.BLACK)
-        background = UiUtil.rect(0xFFBEF1FC.toInt(), 0xFF8CC9D8.toInt(), 1, 8, ctx)
+        setTextColor(cBtnText)
+        background = UiUtil.rect(cBtn, cBtnStroke, 1, 8, ctx)
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(14) }
     }
 
     private fun linkText(label: String, onClick: () -> Unit): TextView =
-        UiUtil.text(ctx, 14f, 0xFF2A62B8.toInt()).apply {
+        UiUtil.text(ctx, 14f, cLink).apply {
             text = label
             gravity = Gravity.CENTER
             setPadding(dp(8), dp(10), dp(8), dp(10))
@@ -154,20 +204,20 @@ class LoginController(
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
 
-    private fun title(t: String) = UiUtil.text(ctx, 24f, Color.BLACK, true).apply {
+    private fun title(t: String) = UiUtil.text(ctx, 24f, cText, true).apply {
         text = t
         gravity = Gravity.CENTER
         setPadding(0, 0, 0, dp(6))
     }
 
-    private fun message(): TextView = UiUtil.text(ctx, 14f, 0xFFD02020.toInt()).apply {
+    private fun message(): TextView = UiUtil.text(ctx, 14f, cErr).apply {
         gravity = Gravity.CENTER
         setPadding(0, dp(10), 0, 0)
         visibility = View.GONE
     }
 
     private fun showMsg(tv: TextView, text: String, ok: Boolean = false) {
-        tv.setTextColor(if (ok) 0xFF1E8E3E.toInt() else 0xFFD02020.toInt())
+        tv.setTextColor(if (ok) cOk else cErr)
         tv.text = text
         tv.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
     }
@@ -189,7 +239,7 @@ class LoginController(
         val rememberBox = CheckBox(ctx).apply {
             text = "Запомнить аккаунт на этом устройстве"
             isChecked = remember
-            setTextColor(0xFF333333.toInt())
+            setTextColor(cText)
             textSize = 13f
             setOnCheckedChangeListener { _, v -> remember = v }
         }
@@ -233,7 +283,7 @@ class LoginController(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(10), dp(8), dp(10))
-            background = UiUtil.rect(Color.WHITE, 0xFFBCCEE2.toInt(), 2, 12, ctx)
+            background = UiUtil.rect(cCard, cCardStroke, 2, 12, ctx)
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(8)
             }
@@ -247,12 +297,12 @@ class LoginController(
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(12) }
         }
-        names.addView(UiUtil.text(ctx, 16f, Color.BLACK, true, 1).apply { text = a.username })
-        names.addView(UiUtil.text(ctx, 12f, 0xFF777777.toInt(), false, 1).apply { text = "Нажмите, чтобы войти" })
+        names.addView(UiUtil.text(ctx, 16f, cText, true, 1).apply { text = a.username })
+        names.addView(UiUtil.text(ctx, 12f, cHint, false, 1).apply { text = "Нажмите, чтобы войти" })
         val del = TextView(ctx).apply {
             text = "✕"
             textSize = 18f
-            setTextColor(0xFF888888.toInt())
+            setTextColor(cHint)
             gravity = Gravity.CENTER
             setPadding(dp(12), dp(8), dp(12), dp(8))
             setOnClickListener {
@@ -340,7 +390,7 @@ class LoginController(
         reset("mode_other")
         val c = card()
         c.addView(title("Код из письма"))
-        c.addView(UiUtil.text(ctx, 14f, 0xFF555555.toInt()).apply {
+        c.addView(UiUtil.text(ctx, 14f, cSub).apply {
             text = "Мы отправили код на вашу почту. Введите его ниже, либо перейдите по ссылке из письма."
             gravity = Gravity.CENTER
         })
@@ -405,7 +455,7 @@ class LoginController(
         reset("mode_other")
         val c = card()
         c.addView(title("Требуется почта"))
-        c.addView(UiUtil.text(ctx, 14f, 0xFF333333.toInt()).apply {
+        c.addView(UiUtil.text(ctx, 14f, cText).apply {
             text = "Аккаунт $username найден, но почта не привязана. Без подтверждённой почты продолжить вход нельзя."
             gravity = Gravity.CENTER
         })
@@ -450,7 +500,7 @@ class LoginController(
         reset("mode_other")
         val c = card()
         c.addView(title("Подтвердите почту"))
-        c.addView(UiUtil.text(ctx, 14f, 0xFF333333.toInt()).apply {
+        c.addView(UiUtil.text(ctx, 14f, cText).apply {
             text = "Письмо отправлено на $email. Откройте ссылку из письма, чтобы создать сессию и перейти на сайт."
             gravity = Gravity.CENTER
         })
@@ -462,11 +512,11 @@ class LoginController(
         reset("mode_other")
         val c = card()
         c.addView(title("Нужно подтвердить почту"))
-        c.addView(UiUtil.text(ctx, 14f, 0xFFD02020.toInt()).apply {
+        c.addView(UiUtil.text(ctx, 14f, cErr).apply {
             text = error + "\nСохранённый адрес: " + (if (masked.isEmpty()) "***" else masked)
             gravity = Gravity.CENTER
         })
-        val status = UiUtil.text(ctx, 13f, 0xFF555555.toInt()).apply {
+        val status = UiUtil.text(ctx, 13f, cSub).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, 0)
         }
@@ -528,13 +578,13 @@ class LoginController(
         sp.setSpan(object : android.text.style.ClickableSpan() {
             override fun onClick(widget: View) { openExternal(path) }
             override fun updateDrawState(ds: android.text.TextPaint) {
-                ds.color = 0xFF2A62B8.toInt()
+                ds.color = cLink
                 ds.isUnderlineText = false
             }
         }, prefix.length, sp.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         text = sp
         movementMethod = android.text.method.LinkMovementMethod.getInstance()
-        setTextColor(0xFF333333.toInt())
+        setTextColor(cText)
         textSize = 13f
     }
 
@@ -612,13 +662,13 @@ class LoginController(
         val c = card()
         c.addView(title("Подтверждение email"))
         if (serverMessage.isNotEmpty()) {
-            c.addView(UiUtil.text(ctx, 14f, 0xFF1E8E3E.toInt()).apply {
+            c.addView(UiUtil.text(ctx, 14f, cOk).apply {
                 text = serverMessage
                 gravity = Gravity.CENTER
                 setPadding(0, 0, 0, dp(8))
             })
         }
-        c.addView(UiUtil.text(ctx, 14f, 0xFF333333.toInt()).apply {
+        c.addView(UiUtil.text(ctx, 14f, cText).apply {
             text = "Мы отправили письмо на $pendingEmail\nПерейдите по ссылке в письме, чтобы завершить регистрацию."
             gravity = Gravity.CENTER
         })
@@ -695,7 +745,7 @@ class LoginController(
         reset("mode_other")
         val c = card()
         c.addView(title("Сброс пароля"))
-        c.addView(UiUtil.text(ctx, 14f, 0xFF555555.toInt()).apply {
+        c.addView(UiUtil.text(ctx, 14f, cSub).apply {
             text = "Введите почту аккаунта — мы отправим код для сброса пароля."
             gravity = Gravity.CENTER
         })
@@ -729,7 +779,7 @@ class LoginController(
         reset("mode_other")
         val c = card()
         c.addView(title("Введите код"))
-        c.addView(UiUtil.text(ctx, 14f, 0xFF555555.toInt()).apply {
+        c.addView(UiUtil.text(ctx, 14f, cSub).apply {
             text = "Код отправлен на $resetEmail"
             gravity = Gravity.CENTER
         })
@@ -780,7 +830,7 @@ class LoginController(
         reset("mode_other")
         val c = card()
         c.addView(title("Новый пароль"))
-        c.addView(UiUtil.text(ctx, 14f, 0xFF555555.toInt()).apply {
+        c.addView(UiUtil.text(ctx, 14f, cSub).apply {
             text = "Введите новый надёжный пароль (минимум 7 символов)."
             gravity = Gravity.CENTER
         })
