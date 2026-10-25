@@ -73,6 +73,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var profileController: ProfileController
     private lateinit var portController: PortController
     private lateinit var notifsController: NotificationsController
+    private lateinit var loginController: LoginController
 
     /** Нативные экраны, которые показываются поверх WebView вместо веб-страниц /chats и /friends. */
     private enum class NativeSection { CHATS, FRIENDS, COMMUNITIES, MUSIC, FEED, POST, PROFILE, PORT, NOTIFS }
@@ -136,7 +137,7 @@ class MainActivity : AppCompatActivity() {
 
         /** Страницы, которые можно открывать без входа (не перенаправляем с них на логин). */
         private val PUBLIC_PATH_PREFIXES = listOf(
-            LOGIN_PATH, "/register", "/signup", "/about", "/privacy", "/terms", "/support"
+            LOGIN_PATH, "/register", "/signup", "/about", "/privacy", "/terms", "/support", "/reset-password"
         )
     }
 
@@ -183,6 +184,9 @@ class MainActivity : AppCompatActivity() {
         postTopBar = findViewById(R.id.postTopBar)
         sectionHeaderAction = findViewById(R.id.sectionHeaderAction)
         siteApi = SiteApi(this)
+        // Идентификатор устройства принадлежит нативному приложению, а не WebView.
+        // Он должен оставаться одним и тем же для /api/login, подтверждения кода и bootstrap.
+        siteApi.setSession("", getOrCreateNativeDeviceId(), webView.settings.userAgentString)
         val defaultBg = loadAssetIcon("styles/bg.webp")
         siteApi.attachBackground(findViewById(R.id.nativeChatsBg), defaultBg)
         siteApi.attachBackground(findViewById(R.id.nativeFriendsBg), defaultBg)
@@ -235,7 +239,7 @@ class MainActivity : AppCompatActivity() {
             onCreateCommunity = {
                 returnSection = nativeSection
                 hideNativeSection()
-                webView.loadUrl("$SITE_ORIGIN/new_community")
+                openWebPage("$SITE_ORIGIN/new_community")
             },
             onAuthLost = authLost
         )
@@ -304,11 +308,22 @@ class MainActivity : AppCompatActivity() {
             },
             onAuthLost = authLost
         )
+        loginController = LoginController(
+            activity = this,
+            api = siteApi,
+            root = findViewById(R.id.rootLayout),
+            onLoggedIn = { user -> onNativeLoginSuccess(user) },
+            onOpenWeb = { path ->
+                loginController.hide()
+                openWebPage(SITE_ORIGIN + path)
+            }
+        )
         findViewById<View>(R.id.notifReadAll).setOnClickListener { notifsController.markAll() }
         findViewById<View>(R.id.notifRefresh).setOnClickListener { notifsController.refresh() }
         findViewById<View>(R.id.notifHome).setOnClickListener {
-            leaveNative()
-            webView.loadUrl("$SITE_ORIGIN")
+            returnSection = null
+            navFrames.clear()
+            showNativeSection(NativeSection.FEED)
         }
         portController = PortController(
             activity = this,
@@ -323,7 +338,7 @@ class MainActivity : AppCompatActivity() {
                 returnSection = NativeSection.PORT
                 returnPortId = pendingCommunityId
                 hideNativeSection()
-                webView.loadUrl("$SITE_ORIGIN$path")
+                openWebPage("$SITE_ORIGIN$path")
             },
             onInfoLoaded = { if (nativeSection == NativeSection.PORT) updateAddPostButton(currentUrl) },
             onBalanceChanged = { refreshCdCoinsBalance() },
@@ -360,7 +375,7 @@ class MainActivity : AppCompatActivity() {
                 returnSection = NativeSection.PROFILE
                 returnProfileId = pendingProfileId
                 hideNativeSection()
-                webView.loadUrl("$SITE_ORIGIN$path")
+                openWebPage("$SITE_ORIGIN$path")
             },
             onOpenChat = openChat,
             onBalanceChanged = { refreshCdCoinsBalance() },
@@ -381,11 +396,18 @@ class MainActivity : AppCompatActivity() {
         setupBottomNav()
         setupTopNav()
 
+        // Основной сценарий полностью нативный: не загружаем /login и ленту в WebView.
+        // WebView включается только для дополнительных страниц без нативной реализации.
+        siteApi.setSession("", getOrCreateNativeDeviceId(), webView.settings.userAgentString)
+        swipeRefresh.visibility = View.GONE
+        webView.visibility = View.GONE
+        loginController.show()
+        if (!isNetworkAvailable()) showOffline() else offlineView.visibility = View.GONE
         if (savedInstanceState != null) {
-            webView.restoreState(savedInstanceState)
-        } else {
-            loadSite()
+            // Не восстанавливаем WebView как главный экран: он может вернуть веб-форму входа.
+            webView.clearHistory()
         }
+        restoreNativeSession()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -499,12 +521,14 @@ class MainActivity : AppCompatActivity() {
                 super.onPageStarted(view, url, favicon)
                 progressBar.visibility = View.VISIBLE
                 lastLoadFailed = false
+                if (pathOf(url) != LOGIN_PATH && isLoggedIn == true) loginController.hide()
             }
 
             override fun onPageFinished(view: WebView, url: String?) {
                 super.onPageFinished(view, url)
                 progressBar.visibility = View.GONE
                 swipeRefresh.isRefreshing = false
+                syncLoginOverlay(view, url)
                 // Лента открылась поверх только что загруженной главной: сессия сайта (userId/deviceId) теперь точно доступна.
                 if (nativeSection == NativeSection.FEED || nativeSection == NativeSection.PROFILE || nativeSection == NativeSection.PORT) startNativeLoading()
 
@@ -761,7 +785,7 @@ class MainActivity : AppCompatActivity() {
             setImageBitmap(loadAssetIcon("ui/icons/new_post.webp"))
             setOnClickListener { openPostCreator() }
         }
-        navHomeCenter.setOnClickListener { leaveNative(); webView.loadUrl("$SITE_ORIGIN") }
+        navHomeCenter.setOnClickListener { returnSection = null; navFrames.clear(); showNativeSection(NativeSection.FEED) }
         findViewById<ImageButton>(R.id.navFriends).apply {
             setImageBitmap(loadAssetIcon("ui/icons/friends_aero.webp"))
             setOnClickListener { returnSection = null; navFrames.clear(); pendingFriendsUserId = null; showNativeSection(NativeSection.FRIENDS) }
@@ -785,8 +809,9 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupTopNav() {
         findViewById<ImageButton>(R.id.navHome).setOnClickListener {
-            leaveNative()
-            webView.loadUrl("$SITE_ORIGIN")
+            returnSection = null
+            navFrames.clear()
+            showNativeSection(NativeSection.FEED)
         }
         findViewById<ImageView>(R.id.navCoinsIcon).setImageBitmap(loadAssetIcon("ui/icons/cd_coin.png"))
         findViewById<LinearLayout>(R.id.navCoins).setOnClickListener {
@@ -1084,32 +1109,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startNativeLoading() {
-        webView.evaluateJavascript(
-            "(function(){try{return JSON.stringify({u:localStorage.getItem('userId')||'',d:localStorage.getItem('deviceId')||''});}catch(e){return '{}';}})()"
-        ) { raw ->
-            var uid = ""
-            var did = ""
-            try {
-                val o = org.json.JSONObject(unwrapJsString(raw) ?: "{}")
-                uid = o.optString("u", "")
-                did = o.optString("d", "")
-            } catch (e: Exception) {
-                Log.w(TAG, "Не удалось прочитать сессию из WebView", e)
-            }
-            if (isFinishing || isDestroyed) return@evaluateJavascript
-            val ua = webView.settings.userAgentString
-            when (nativeSection) {
-                NativeSection.CHATS -> chatsController.start(uid, did, ua)
-                NativeSection.FRIENDS -> friendsController.start(uid, did, ua)
-                NativeSection.COMMUNITIES -> communitiesController.start(uid, did, ua)
-                NativeSection.MUSIC -> musicController.start(uid, did, ua)
-                NativeSection.FEED -> feedController.start(uid, did, ua)
-                NativeSection.POST -> postController.start(uid, did, ua)
-                NativeSection.PROFILE -> profileController.start(uid, did, ua)
-                NativeSection.PORT -> portController.start(uid, did, ua)
-                NativeSection.NOTIFS -> notifsController.start(uid, did, ua)
-                null -> {}
-            }
+        if (isFinishing || isDestroyed) return
+        val uid = siteApi.userId
+        val did = siteApi.deviceId.ifBlank { getOrCreateNativeDeviceId() }
+        val ua = webView.settings.userAgentString
+        siteApi.setSession(uid, did, ua)
+        when (nativeSection) {
+            NativeSection.CHATS -> chatsController.start(uid, did, ua)
+            NativeSection.FRIENDS -> friendsController.start(uid, did, ua)
+            NativeSection.COMMUNITIES -> communitiesController.start(uid, did, ua)
+            NativeSection.MUSIC -> musicController.start(uid, did, ua)
+            NativeSection.FEED -> feedController.start(uid, did, ua)
+            NativeSection.POST -> postController.start(uid, did, ua)
+            NativeSection.PROFILE -> profileController.start(uid, did, ua)
+            NativeSection.PORT -> portController.start(uid, did, ua)
+            NativeSection.NOTIFS -> notifsController.start(uid, did, ua)
+            null -> {}
         }
     }
 
@@ -1207,8 +1222,166 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Нативная форма показывается только когда авторизация не подтверждена.
+     * /login может быть открыт самим сайтом в процессе синхронизации localStorage;
+     * не сбрасываем состояние и не показываем форму поверх уже подтверждённой сессии.
+     */
+    private fun syncLoginOverlay(view: WebView, url: String?) {
+        if (pathOf(url) != LOGIN_PATH) {
+            if (isLoggedIn == true || isPublicPath(url)) {
+                loginController.hide()
+            } else {
+                hideNativeSection()
+                loginController.show()
+            }
+            return
+        }
+
+        if (isLoggedIn == true) {
+            loginController.hide()
+            return
+        }
+
+        view.evaluateJavascript(
+            "(function(){try{return localStorage.getItem('deviceId')||'';}catch(e){return '';}})()"
+        ) { raw ->
+            if (isFinishing || isDestroyed) return@evaluateJavascript
+            val deviceId = unwrapJsString(raw).orEmpty()
+            siteApi.userId = ""
+            siteApi.setSession("", deviceId, view.settings.userAgentString)
+            if (pathOf(webView.url) == LOGIN_PATH && isLoggedIn != true) {
+                hideNativeSection()
+                loginController.show()
+            } else {
+                loginController.hide()
+            }
+        }
+    }
+
+    /** После подтверждения кода проверяем серверную сессию и открываем нативную ленту. */
+    private fun onNativeLoginSuccess(user: org.json.JSONObject) {
+        val activeDeviceId = siteApi.deviceId.ifBlank { getOrCreateNativeDeviceId() }
+        siteApi.setSession("", activeDeviceId, webView.settings.userAgentString)
+        siteApi.io.execute {
+            var confirmedUser: org.json.JSONObject? = null
+            var explicitInvalid = false
+            var verificationUnavailable = false
+            try {
+                val response = siteApi.get("/api/session/bootstrap")
+                if (response.code == 200) {
+                    val bootstrap = org.json.JSONObject(response.body)
+                    if (bootstrap.optBoolean("authenticated", false)) {
+                        confirmedUser = bootstrap.optJSONObject("user")
+                    } else if (bootstrap.has("authenticated")) {
+                        explicitInvalid = true
+                    }
+                } else if (response.code == 401) {
+                    explicitInvalid = true
+                } else {
+                    verificationUnavailable = true
+                }
+            } catch (e: Exception) {
+                verificationUnavailable = true
+                Log.w(TAG, "Session bootstrap failed immediately after native login", e)
+            }
+
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (explicitInvalid) {
+                    siteApi.userId = ""
+                    isLoggedIn = false
+                    loginController.showLoginError("Сервер не подтвердил сессию после входа. Проверьте подключение и войдите снова.")
+                    Log.w(TAG, "Native login returned success, but session bootstrap rejected the session")
+                    return@runOnUiThread
+                }
+
+                val sessionUser = confirmedUser ?: user
+                val id = sessionUser.optLong("id", user.optLong("id", 0L)).toString()
+                if (id == "0") {
+                    loginController.showLoginError("Сервер не вернул идентификатор пользователя")
+                    return@runOnUiThread
+                }
+                siteApi.setSession(id, activeDeviceId, webView.settings.userAgentString)
+                synchronized(this@MainActivity) {
+                    authStateVersion++
+                    pendingAuthInvalidCallbacks.clear()
+                }
+                isLoggedIn = true
+                authRecheckPending = false
+                autoLoginRedirectDone = false
+                swipeRefresh.visibility = View.GONE
+                webView.visibility = View.GONE
+                offlineView.visibility = View.GONE
+                loginController.hide()
+                returnSection = null
+                navFrames.clear()
+                showNativeSection(NativeSection.FEED)
+                if (verificationUnavailable) {
+                    Log.w(TAG, "Could not verify session after login; opening native feed using login response")
+                }
+            }
+        }
+    }
+
+
+    /** Восстанавливает сессию напрямую через API, не загружая сайт в WebView. */
+    private fun restoreNativeSession() {
+        val did = getOrCreateNativeDeviceId()
+        val ua = webView.settings.userAgentString
+        siteApi.setSession("", did, ua)
+        siteApi.io.execute {
+            var user: org.json.JSONObject? = null
+            try {
+                val response = siteApi.get("/api/session/bootstrap")
+                if (response.code == 200) {
+                    val body = org.json.JSONObject(response.body)
+                    if (body.optBoolean("authenticated", false)) user = body.optJSONObject("user")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Native session restore failed", e)
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                val restored = user
+                val id = restored?.optLong("id", 0L) ?: 0L
+                if (id > 0L) {
+                    siteApi.setSession(id.toString(), did, ua)
+                    isLoggedIn = true
+                    loginController.hide()
+                    swipeRefresh.visibility = View.GONE
+                    webView.visibility = View.GONE
+                    showNativeSection(NativeSection.FEED)
+                } else {
+                    isLoggedIn = false
+                    loginController.show()
+                }
+            }
+        }
+    }
+
+    /** Постоянный UUID приложения: один и тот же для запроса входа и проверки сессии. */
+    private fun getOrCreateNativeDeviceId(): String {
+        val prefs = getSharedPreferences("fortport_native_session", MODE_PRIVATE)
+        val existing = prefs.getString("device_id", null)
+        if (!existing.isNullOrBlank()) return existing
+        val created = java.util.UUID.randomUUID().toString()
+        prefs.edit().putString("device_id", created).apply()
+        return created
+    }
+
+    /** Показывает WebView только для вспомогательных страниц без нативной реализации. */
+    private fun openWebPage(url: String) {
+        hideNativeSection()
+        swipeRefresh.visibility = View.VISIBLE
+        webView.visibility = View.VISIBLE
+        webView.loadUrl(url)
+    }
+
     private fun openLoginPage() {
-        webView.loadUrl("$SITE_ORIGIN$LOGIN_PATH")
+        swipeRefresh.visibility = View.GONE
+        webView.visibility = View.GONE
+        loginController.showLoginError("")
     }
 
     /** При первом входе (сессии нет) сразу ведём на страницу авторизации. */
@@ -1512,7 +1685,8 @@ class MainActivity : AppCompatActivity() {
                         finishedUri.path.orEmpty().startsWith("/api/")) {
                         Log.i(TAG, "Выход из оплаты на API-страницу; возвращаемся на главную")
                         closePaymentWebView()
-                        webView.loadUrl(SITE_ORIGIN + "/")
+                        if (isLoggedIn == true) showNativeSection(NativeSection.FEED)
+                        else openWebPage(SITE_ORIGIN + "/")
                     }
                 }
 
@@ -1674,7 +1848,7 @@ class MainActivity : AppCompatActivity() {
                 runOpenPostCreatorJs()
             } else {
                 pendingOpenPostCreator = true
-                webView.loadUrl("$SITE_ORIGIN/main")
+                openWebPage("$SITE_ORIGIN/main")
             }
         }
     }
@@ -2024,13 +2198,16 @@ class MainActivity : AppCompatActivity() {
     private fun loadSite() {
         if (isNetworkAvailable()) {
             offlineView.visibility = View.GONE
-            swipeRefresh.visibility = View.VISIBLE
-            webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
-            webView.loadUrl(getString(R.string.site_url))
+            if (isLoggedIn == true) {
+                swipeRefresh.visibility = View.GONE
+                webView.visibility = View.GONE
+                showNativeSection(NativeSection.FEED)
+            } else {
+                swipeRefresh.visibility = View.GONE
+                webView.visibility = View.GONE
+                loginController.show()
+            }
         } else {
-            // Пытаемся показать последнюю сохранённую версию из кэша, если она есть
-            webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-            webView.loadUrl(getString(R.string.site_url))
             showOffline()
         }
     }
@@ -2115,6 +2292,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
+        if (loginController.handleBack()) return
         val payWebView = paymentWebView
         if (payWebView != null) {
             if (payWebView.canGoBack()) {
@@ -2245,6 +2423,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        loginController.destroy()
         chatsController.destroy()
         friendsController.destroy()
         communitiesController.destroy()
