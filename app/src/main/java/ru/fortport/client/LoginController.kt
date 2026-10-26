@@ -13,6 +13,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -102,8 +103,33 @@ class LoginController(
 
     fun show() {
         if (destroyed) return
+        // После проверки сессии на старте вместо индикатора показываем форму входа.
+        if (content.tag == "mode_checking") showLoginForm("")
         overlay.visibility = View.VISIBLE
         if (challengeId == null) refreshPlates()
+    }
+
+    /**
+     * Холодный старт: пока сервер проверяет сохранённую сессию, показываем фон и индикатор
+     * вместо формы входа (чтобы она не мелькала у уже авторизованного пользователя).
+     * Если сессии нет — вызывается show() и появляется форма.
+     */
+    fun showChecking() {
+        if (destroyed) return
+        reset("mode_checking")
+        content.addView(ProgressBar(ctx).apply {
+            isIndeterminate = true
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dp(160)
+            }
+        })
+        content.addView(UiUtil.text(ctx, 14f, cSub).apply {
+            text = "Проверяем сессию…"
+            gravity = Gravity.CENTER
+            setPadding(0, dp(12), 0, 0)
+        })
+        overlay.visibility = View.VISIBLE
     }
 
     /** Фон как на сайте (reglogin_bg.webp): сначала кэш/стандартный из assets, затем пробуем скачать. */
@@ -151,6 +177,7 @@ class LoginController(
     /** Системная кнопка «назад»: из шага 2FA/почты — к форме. */
     fun handleBack(): Boolean {
         if (!isShowing) return false
+        if (content.tag == "mode_checking") return true // идёт проверка сессии: «назад» ничего не делает
         if (challengeId != null || content.tag == "mode_other") {
             challengeId = null
             showLoginForm("")
