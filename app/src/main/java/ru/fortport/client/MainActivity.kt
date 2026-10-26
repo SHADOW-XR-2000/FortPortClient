@@ -401,7 +401,7 @@ class MainActivity : AppCompatActivity() {
         siteApi.setSession("", getOrCreateNativeDeviceId(), webView.settings.userAgentString)
         swipeRefresh.visibility = View.GONE
         webView.visibility = View.GONE
-        loginController.show()
+        loginController.showChecking() // форма входа появится только если сессии нет
         if (!isNetworkAvailable()) showOffline() else offlineView.visibility = View.GONE
         if (savedInstanceState != null) {
             // Не восстанавливаем WebView как главный экран: он может вернуть веб-форму входа.
