@@ -13,4 +13,5 @@
     <string name="nav_coins">CD-Coins</string>
     <string name="nav_notifs">Уведомления</string>
     <string name="nav_profile">Профиль</string>
+    <string name="nav_settings">Настройки</string>
 </resources>
