@@ -434,7 +434,8 @@ class DemoBackend(context: Context) {
     }
 
     @Synchronized
-    fun handleMultipart(method: String, path: String, body: MultipartBody): SiteApi.Resp = try {
+    fun handleMultipart(method: String, path: String, body: MultipartBody): SiteApi.Resp {
+        return try {
         val f = fields(body)
         val p = path.substringBefore('?')
         val res = when {
@@ -461,6 +462,7 @@ class DemoBackend(context: Context) {
         persist(); res
     } catch (e: Exception) {
         Log.w(TAG, "multipart $path", e); fail(500, "Тестовый режим: ошибка обработки запроса")
+    }
     }
 
     private fun pollFrom(raw: String): JSONObject? = try {
