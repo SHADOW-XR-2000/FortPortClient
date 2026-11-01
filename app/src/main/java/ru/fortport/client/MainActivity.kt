@@ -189,6 +189,12 @@ class MainActivity : AppCompatActivity() {
         notifBottomBar = findViewById(R.id.notifBottomBar)
         postTopBar = findViewById(R.id.postTopBar)
         sectionHeaderAction = findViewById(R.id.sectionHeaderAction)
+        // Основные верхняя (аватар, CD, уведомления) и нижняя (музыка, порты, пост/домой, друзья, переписки)
+        // панели рисуются картинками из assets/ui (*_royal_panel-invert.png); нет файла — прежний цвет.
+        // Шапки разделов и остальные панели не трогаем, как и шаблоны постов (UiUtil.royal).
+        listOf(topNavBar, bottomNavBar).forEach { bar ->
+            UiUtil.barSkin(this)?.let { bar.background = it }
+        }
         siteApi = SiteApi(this)
         // Идентификатор устройства принадлежит нативному приложению, а не WebView.
         // Он должен оставаться одним и тем же для /api/login, подтверждения кода и bootstrap.

@@ -45,6 +45,27 @@ object UiUtil {
         else GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xFF4DA3FF.toInt(), 0xFF1F6FD1.toInt()))
     }
 
+    private var dayBar: Bitmap? = null
+    private var nightBar: Bitmap? = null
+
+    /**
+     * Фон верхних и нижних панелей: assets/ui/day_royal_panel-invert.png (светлая тема) и
+     * night_royal_panel-invert.png (тёмная), растянутые на всю панель. Каждый вызов даёт
+     * отдельный Drawable. null — файла нет в assets (тогда остаётся прежняя окраска панели).
+     */
+    fun barSkin(ctx: Context): Drawable? {
+        val night = isNight(ctx)
+        var bmp = if (night) nightBar else dayBar
+        if (bmp == null) {
+            bmp = try {
+                ctx.assets.open(if (night) "ui/night_royal_panel-invert.png" else "ui/day_royal_panel-invert.png")
+                    .use { BitmapFactory.decodeStream(it) }
+            } catch (e: Exception) { null }
+            if (night) nightBar = bmp else dayBar = bmp
+        }
+        return bmp?.let { BitmapDrawable(ctx.resources, it).apply { gravity = Gravity.FILL } }
+    }
+
     fun rect(fill: Int, stroke: Int = 0, strokeDp: Int = 0, radiusDp: Int = 0, ctx: Context): GradientDrawable =
         GradientDrawable().apply {
             setColor(fill)
