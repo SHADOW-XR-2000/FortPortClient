@@ -274,6 +274,14 @@ class LoginController(
         c.addView(ident); c.addView(pass); c.addView(rememberBox); c.addView(msg); c.addView(btn)
         c.addView(linkText("Забыли пароль?") { showResetEmail() })
         c.addView(linkText("Нет аккаунта? Зарегистрироваться") { showRegister() })
+        // Тестовый режим разработчика: виртуальный аккаунт и лента в локальной базе, сервер не нужен.
+        c.addView(linkText("🛠 Тестовый режим разработчика (офлайн)") { enterDemoMode() }.apply {
+            setOnLongClickListener {
+                (api.demo ?: DemoBackend(ctx)).reset()
+                showMsg(msg, "Данные тестового режима сброшены", ok = true)
+                true
+            }
+        })
         content.addView(c)
         if (error.isNotEmpty()) showMsg(msg, error)
         else if (info.isNotEmpty()) showMsg(msg, info, ok = true)
@@ -396,6 +404,14 @@ class LoginController(
                 finishLogin(user)
             }
         }
+    }
+
+    /** Вход в тестовый режим: без сервера, аккаунт не запоминается. Долгое нажатие на ссылку сбрасывает данные. */
+    private fun enterDemoMode() {
+        val demo = api.enterDemo()
+        lastPassword = ""
+        challengeId = null
+        onLoggedIn(demo.meJson())
     }
 
     private fun finishLogin(user: JSONObject) {

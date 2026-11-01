@@ -7,6 +7,7 @@ import android.webkit.CookieManager
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -38,6 +39,28 @@ class SiteApi(private val activity: AppCompatActivity) {
     @Volatile var userId = ""
     @Volatile var deviceId = ""
     @Volatile var userAgent = ""
+
+    // ------------------------------------------------------------------ тестовый режим разработчика
+
+    private val sessionPrefs = activity.getSharedPreferences("fortport_native_session", Context.MODE_PRIVATE)
+
+    /** Не null — тестовый режим: все запросы обслуживает локальная «база» (см. DemoBackend). */
+    @Volatile var demo: DemoBackend? = if (sessionPrefs.getBoolean("demo_mode", false)) DemoBackend(activity) else null
+    val isDemo: Boolean get() = demo != null
+
+    fun enterDemo(): DemoBackend {
+        val d = demo ?: DemoBackend(activity)
+        demo = d
+        sessionPrefs.edit().putBoolean("demo_mode", true).apply()
+        userId = DemoBackend.ME.toString()
+        return d
+    }
+
+    fun exitDemo() {
+        demo = null
+        sessionPrefs.edit().putBoolean("demo_mode", false).apply()
+        userId = ""
+    }
 
     /** Один поток для сетевых задач разделов (запросы идут по очереди). */
     val io: ExecutorService = Executors.newSingleThreadExecutor()
@@ -75,12 +98,20 @@ class SiteApi(private val activity: AppCompatActivity) {
 
     /** json == null — тело пустое (для POST) или отсутствует (GET/DELETE). */
     fun send(method: String, path: String, json: String?): Resp {
+        demo?.let { return it.handle(method, path, json) }
         val body = when {
             method == "GET" -> null
             json != null -> json.toRequestBody(JSON_TYPE) // в т.ч. DELETE с телом (отмена голоса в опросе)
             method == "DELETE" -> null
             else -> ByteArray(0).toRequestBody(null)
         }
+        val req = Request.Builder().url(ORIGIN + path).method(method, body).build()
+        client.newCall(req).execute().use { return Resp(it.code, it.body?.string().orEmpty()) }
+    }
+
+    /** multipart-запрос (новый пост, комментарий, картинка); в тестовом режиме — в локальную «базу». */
+    fun sendMultipart(method: String, path: String, body: MultipartBody): Resp {
+        demo?.let { return it.handleMultipart(method, path, body) }
         val req = Request.Builder().url(ORIGIN + path).method(method, body).build()
         client.newCall(req).execute().use { return Resp(it.code, it.body?.string().orEmpty()) }
     }

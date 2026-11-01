@@ -327,6 +327,7 @@ class PostsRepo(private val api: SiteApi) {
 
     /** DELETE с JSON-телом (отмена голоса). Не зависит от того, отправляет ли SiteApi.send тело для DELETE. */
     private fun deleteWithBody(path: String, json: String): SiteApi.Resp {
+        if (api.isDemo) return api.send("DELETE", path, json)
         val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
         val req = Request.Builder().url(SiteApi.ORIGIN + path).method("DELETE", body).build()
         api.client.newCall(req).execute().use { return SiteApi.Resp(it.code, it.body?.string().orEmpty()) }
@@ -364,8 +365,7 @@ class PostsRepo(private val api: SiteApi) {
             )
         }
         if (refId != null) b.addFormDataPart("refId", refId.toString())
-        val req = Request.Builder().url(SiteApi.ORIGIN + "/api/posts/$postId/comments").post(b.build()).build()
-        api.client.newCall(req).execute().use { outcome(SiteApi.Resp(it.code, it.body?.string().orEmpty())) }
+        outcome(api.sendMultipart("POST", "/api/posts/$postId/comments", b.build()))
     }
 
     class UploadFile(val bytes: ByteArray, val name: String, val mime: String)
@@ -400,8 +400,7 @@ class PostsRepo(private val api: SiteApi) {
         d.files.forEach { f ->
             b.addFormDataPart("files", f.name, f.bytes.toRequestBody(f.mime.ifBlank { "application/octet-stream" }.toMediaType()))
         }
-        val req = Request.Builder().url(SiteApi.ORIGIN + "/api/posts").post(b.build()).build()
-        api.client.newCall(req).execute().use { outcome(SiteApi.Resp(it.code, it.body?.string().orEmpty())) }
+        outcome(api.sendMultipart("POST", "/api/posts", b.build()))
     }
 
     /** Порты, в которые можно написать (выбор «Новый пост в:»): [(id, название)]. */
