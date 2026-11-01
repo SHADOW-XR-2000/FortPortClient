@@ -115,6 +115,7 @@ class MainActivity : AppCompatActivity() {
     private var returnSection: NativeSection? = null
     /** Последний известный адрес страницы (в т.ч. после JS-роутинга сайта без перезагрузки). */
     private var currentUrl: String? = null
+    private lateinit var userMenu: UserMenu
     private lateinit var navProfileAvatar: ImageView
     private lateinit var navNotifBadge: TextView
     private lateinit var navCoinsValue: TextView
@@ -407,9 +408,23 @@ class MainActivity : AppCompatActivity() {
             assets.open("ui/icons/setting_icon.png").use { findViewById<ImageView>(R.id.settingsTopIcon).setImageBitmap(BitmapFactory.decodeStream(it)) }
         } catch (e: Exception) { /* иконку положат в assets/ui/icons позже */ }
         sectionHeaderAction.setOnClickListener { musicController.pickFromDevice() }
-        navProfileAvatar = findViewById(R.id.navProfileAvatar)
+        userMenu = UserMenu(
+            activity = this,
+            api = siteApi,
+            root = findViewById(R.id.rootLayout),
+            onProfile = { openNativeProfile(0L) }, // 0 — своя страница
+            onTopUp = {
+                if (siteApi.isDemo) Toast.makeText(this, "Недоступно в тестовом режиме", Toast.LENGTH_SHORT).show()
+                else showCdCoinsPurchaseDialog()
+            },
+            onSettings = { openNativeSettings() },
+            onPage = { path -> openSitePage(path) },
+            onUpdate = { Toast.makeText(this, "Проверка обновлений пока недоступна", Toast.LENGTH_SHORT).show() },
+            onLogout = { logout() }
+        )
+        navProfileAvatar = userMenu.avatar
         navNotifBadge = findViewById(R.id.navNotifBadge)
-        navCoinsValue = findViewById(R.id.navCoinsValue)
+        navCoinsValue = userMenu.coinsValue
 
         findViewById<Button>(R.id.retryButton).setOnClickListener {
             loadSite()
@@ -832,26 +847,49 @@ class MainActivity : AppCompatActivity() {
      * updateAuthButtons() в auth.js), которую прячем через injectNavCleanup().
      */
     private fun setupTopNav() {
-        findViewById<ImageButton>(R.id.navHome).setOnClickListener {
-            returnSection = null
-            navFrames.clear()
-            showNativeSection(NativeSection.FEED)
-        }
-        findViewById<ImageView>(R.id.navCoinsIcon).setImageBitmap(loadAssetIcon("ui/icons/cd_coin.png"))
-        findViewById<LinearLayout>(R.id.navCoins).setOnClickListener {
-            showCdCoinsPurchaseDialog()
-        }
+        // Правый угол: кнопка раскрывает меню пользователя; слева — уведомления.
+        findViewById<ImageButton>(R.id.navHome).setOnClickListener { userMenu.toggle() }
         findViewById<ImageButton>(R.id.navNotifs).apply {
             setImageBitmap(loadAssetIcon("ui/icons/bell_aero.webp"))
             setOnClickListener { openNotifications() }
         }
-        findViewById<LinearLayout>(R.id.navProfile).setOnClickListener { anchor ->
-            if (isLoggedIn == false && !isPublicPath(webView.url)) {
-                openLoginPage()
-            } else {
-                // На странице входа состояние могло смениться без перезагрузки — перепроверяем.
-                if (isLoggedIn == false) refreshCdCoinsBalance()
-                showProfileMenu(anchor)
+    }
+
+    /** Страница сайта (поддержка, о нас, конфиденциальность, условия) в WebView; «Назад» вернёт на нативный экран. */
+    private fun openSitePage(path: String) {
+        if (siteApi.isDemo) {
+            Toast.makeText(this, "Недоступно в тестовом режиме", Toast.LENGTH_SHORT).show()
+            return
+        }
+        returnSection = nativeSection
+        returnProfileId = pendingProfileId
+        returnPortId = pendingCommunityId
+        postReturnId = pendingPostId
+        openWebPage("$SITE_ORIGIN$path")
+    }
+
+    /** «Завершить сессию»: выход на сервере (ошибка сети не мешает) и локально — куки и состояние. */
+    private fun logout() {
+        if (siteApi.isDemo) { leaveDemo(); return }
+        siteApi.io.execute {
+            try { siteApi.send("POST", "/api/logout", null) } catch (e: Exception) { Log.w(TAG, "logout", e) }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                CookieManager.getInstance().removeAllCookies(null)
+                CookieManager.getInstance().flush()
+                synchronized(this) {
+                    authStateVersion++
+                    pendingAuthInvalidCallbacks.clear()
+                }
+                siteApi.userId = ""
+                isLoggedIn = false
+                returnSection = null
+                navFrames.clear()
+                hideNativeSection()
+                swipeRefresh.visibility = View.GONE
+                webView.visibility = View.GONE
+                updateBarsVisibility()
+                loginController.show()
             }
         }
     }
@@ -1018,6 +1056,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showNativeSection(section: NativeSection) {
         if (isLoggedIn == false) return
+        userMenu.hide()
         if (section == NativeSection.MUSIC) {
             val changed = musicController.setViewedUser(pendingMusicUserId)
             if (changed && nativeSection == NativeSection.MUSIC) {
@@ -1442,68 +1481,6 @@ class MainActivity : AppCompatActivity() {
         if (isPublicPath(webView.url)) return
         autoLoginRedirectDone = true
         openLoginPage()
-    }
-
-    /**
-     * Нативное меню профиля (PopupMenu) — дублирует пункты из #user-dropdown
-     * сайта (auth.js), поскольку сам #user-dropdown теперь недоступен: он
-     * физически находится внутри скрытого #main-top-bar, а display:none на
-     * родителе скрывает потомков безусловно, что бы мы ни делали с классом
-     * .show у самого дропдауна.
-     */
-    private fun showProfileMenu(anchor: View) {
-        val items = listOf(
-            "Мой профиль" to "/profile",
-            "Настройки" to "/settings",
-            "Поддержка" to "/support",
-            "О нас" to "/about",
-            "Конфиденциальность" to "/privacy",
-            "Условия" to "/terms",
-            "Выйти" to null
-        )
-        val popup = PopupMenu(this, anchor)
-        items.forEachIndexed { index, (label, _) -> popup.menu.add(0, index, index, label) }
-        popup.setOnMenuItemClickListener { menuItem ->
-            val (_, path) = items[menuItem.itemId]
-            if (path == "/settings") {
-                openNativeSettings()
-            } else if (siteApi.isDemo) {
-                when (path) {
-                    null -> leaveDemo()
-                    "/profile" -> openNativeProfile(siteApi.userId.toLongOrNull() ?: 0L)
-                    else -> Toast.makeText(this, "Недоступно в тестовом режиме", Toast.LENGTH_SHORT).show()
-                }
-            } else if (path == null) {
-                webView.evaluateJavascript(
-                    "if (typeof logout === 'function') { logout(); }",
-                    null
-                )
-            } else {
-                // Сначала используем штатную ссылку сайта: на некоторых страницах
-                // переходы обрабатываются JavaScript-кодом сайта. Прямой loadUrl()
-                // обходит обработчик ссылки и может оставить профиль на спиннере.
-                val targetPath = path
-                val targetUrl = "$SITE_ORIGIN$targetPath"
-                val jsPath = targetPath.replace("\\", "\\\\").replace("'", "\\'")
-                webView.evaluateJavascript("""
-                    (function() {
-                        var wanted = '$jsPath';
-                        var links = Array.prototype.slice.call(document.querySelectorAll('#user-dropdown a[href], a[href]'));
-                        var link = links.find(function(a) {
-                            try { return new URL(a.href, location.href).pathname.replace(/\/$/, '') === wanted.replace(/\/$/, ''); }
-                            catch (e) { return false; }
-                        });
-                        if (link) { link.click(); return 'clicked'; }
-                        location.href = '$targetUrl';
-                        return 'fallback';
-                    })();
-                """.trimIndent()) { result ->
-                    Log.d(TAG, "Переход из меню профиля на $targetPath: $result")
-                }
-            }
-            true
-        }
-        popup.show()
     }
 
     /**
@@ -2354,6 +2331,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onBackPressed() {
         if (loginController.handleBack()) return
+        if (userMenu.isShowing) { userMenu.hide(); return }
         val payWebView = paymentWebView
         if (payWebView != null) {
             if (payWebView.canGoBack()) {
@@ -2427,7 +2405,7 @@ class MainActivity : AppCompatActivity() {
             hideNativeSection()
             // Под списком может лежать веб-версия /chats или /friends — тогда идём назад по истории.
             if (pathOf(webView.url) !in setOf("/chats", "/friends", "/communities", "/music")) return
-        } else if (returnSection != null && pathOf(webView.url) in setOf("/profile", "/community", "/new_community", "/post", "/settings", "/friends", "/communities", "/community/settings")) {
+        } else if (returnSection != null && pathOf(webView.url) in setOf("/profile", "/community", "/new_community", "/post", "/settings", "/friends", "/communities", "/community/settings", "/support", "/about", "/privacy", "/terms")) {
             // Профиль/порт открыли из нативного списка — «Назад» возвращает в него.
             val back = returnSection!!
             returnSection = null

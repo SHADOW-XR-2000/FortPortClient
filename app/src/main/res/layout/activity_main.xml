@@ -697,53 +697,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <ImageButton
-            android:id="@+id/navHome"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/nav_icon_frame"
-            android:padding="4dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_nav_home"
-            android:contentDescription="@string/nav_home" />
-
-        <View
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
-        <LinearLayout
-            android:id="@+id/navCoins"
-            android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:background="@drawable/nav_icon_frame_rounded"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="8dp">
-
-            <ImageView
-                android:id="@+id/navCoinsIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:scaleType="fitCenter"
-                android:contentDescription="@string/nav_coins" />
-
-            <TextView
-                android:id="@+id/navCoinsValue"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:text="—"
-                android:textColor="@android:color/white"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-        </LinearLayout>
-
-        <View
-            android:layout_width="14dp"
-            android:layout_height="1dp" />
-
+        <!-- Уведомления — в левом углу. -->
         <FrameLayout
             android:layout_width="40dp"
             android:layout_height="40dp">
@@ -774,35 +728,20 @@
         </FrameLayout>
 
         <View
-            android:layout_width="14dp"
-            android:layout_height="1dp" />
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
 
-        <LinearLayout
-            android:id="@+id/navProfile"
-            android:layout_width="wrap_content"
+        <!-- Кнопка в правом углу раскрывает меню пользователя (UserMenu). -->
+        <ImageButton
+            android:id="@+id/navHome"
+            android:layout_width="40dp"
             android:layout_height="40dp"
-            android:background="@drawable/nav_icon_frame_rounded"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="6dp">
-
-            <ImageView
-                android:id="@+id/navProfileAvatar"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:src="@drawable/avatar_placeholder"
-                android:scaleType="centerCrop"
-                android:contentDescription="@string/nav_profile" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:text="▼"
-                android:textColor="@android:color/white"
-                android:textSize="10sp" />
-
-        </LinearLayout>
+            android:background="@drawable/nav_icon_frame"
+            android:padding="4dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_nav_home"
+            android:contentDescription="@string/nav_profile" />
 
     </LinearLayout>
 
