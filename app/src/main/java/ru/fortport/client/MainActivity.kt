@@ -26,6 +26,7 @@ import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -1105,6 +1106,19 @@ class MainActivity : AppCompatActivity() {
         showNativeSection(NativeSection.PORT)
     }
 
+    /** Выход из тестового режима: назад к форме входа (данные тестового аккаунта остаются на устройстве). */
+    private fun leaveDemo() {
+        siteApi.exitDemo()
+        isLoggedIn = false
+        returnSection = null
+        navFrames.clear()
+        hideNativeSection()
+        swipeRefresh.visibility = View.GONE
+        webView.visibility = View.GONE
+        updateBarsVisibility()
+        loginController.show()
+    }
+
     /** Нативные настройки профиля (вкладки «Профиль», «Безопасность», «Кастомизация»). */
     private fun openNativeSettings() {
         if (nativeSection == NativeSection.SETTINGS) return
@@ -1447,6 +1461,12 @@ class MainActivity : AppCompatActivity() {
             val (_, path) = items[menuItem.itemId]
             if (path == "/settings") {
                 openNativeSettings()
+            } else if (siteApi.isDemo) {
+                when (path) {
+                    null -> leaveDemo()
+                    "/profile" -> openNativeProfile(siteApi.userId.toLongOrNull() ?: 0L)
+                    else -> Toast.makeText(this, "Недоступно в тестовом режиме", Toast.LENGTH_SHORT).show()
+                }
             } else if (path == null) {
                 webView.evaluateJavascript(
                     "if (typeof logout === 'function') { logout(); }",
@@ -2247,6 +2267,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showOffline() {
+        if (siteApi.isDemo) return // тестовый режим работает без сети
         offlineView.visibility = View.VISIBLE
     }
 

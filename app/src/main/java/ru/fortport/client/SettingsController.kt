@@ -623,7 +623,8 @@ class SettingsController(
                     auth -> onAuthLost()
                     err != null -> toast(err!!, false)
                     else -> {
-                        uploads.forEach { pendingImg.remove(it.first) }
+                        // В тестовом режиме файл не сохраняется — оставляем выбранную картинку на экране.
+                        if (!api.isDemo) uploads.forEach { pendingImg.remove(it.first) }
                         freshBio?.let { avatarPath = api.str(it, "profilePicture"); profileBgPath = api.str(it, "profileBackground") }
                         freshCust?.let { feedBgPath = api.str(it, "customBackground") }
                         toast("Настройки сохранены", true)
@@ -650,8 +651,8 @@ class SettingsController(
             .addFormDataPart("userId", api.userId)
             .addFormDataPart(Endpoints.FILE_FIELD, "upload.$ext", bytes.toRequestBody(mime.toMediaType()))
             .build()
-        val req = Request.Builder().url(SiteApi.ORIGIN + ep.path).method(ep.method, body).build()
-        api.client.newCall(req).execute().use { return it.code to (it.body?.string().orEmpty()) }
+        val r = api.sendMultipart(ep.method, ep.path, body)
+        return r.code to r.body
     }
 
     // ------------------------------------------------------------------ даты
