@@ -144,8 +144,8 @@ class PostCardView(context: Context) : LinearLayout(context) {
         col.addView(UiUtil.text(ctx, 12f, Color.WHITE).apply { text = date; setShadowLayer(2f, 0f, 1f, 0x99000000.toInt()) })
 
         val menu = TextView(ctx).apply {
-            text = "▼"; textSize = 16f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
-            background = UiUtil.rect(0x33FFFFFF, Color.WHITE, 2, 8, ctx)
+            text = "▼"; textSize = 16f; gravity = Gravity.CENTER
+            AeroButton.style(this)
         }
         row.addView(menu, UiUtil.lp(dp(ctx, 40), dp(ctx, 40)))
         menu.setOnClickListener { PostDialogs.showPostMenu(host, it, p) }
