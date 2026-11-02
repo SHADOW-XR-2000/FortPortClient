@@ -144,7 +144,7 @@ object PostComposer {
         fun chip(label: String, onRemove: () -> Unit): View = LinearLayout(act).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
-            background = UiUtil.rect(UiUtil.SURFACE_ALT, UiUtil.BORDER, 1, 6, act)
+            background = UiUtil.rect(0xFFEAF6FA.toInt(), UiUtil.BORDER, 1, 6, act)
             setPadding(dp(act, 10), dp(act, 4), dp(act, 4), dp(act, 4))
             addView(
                 UiUtil.text(act, 14f, UiUtil.TEXT, maxLines = 1).apply { text = label },
@@ -230,7 +230,6 @@ object PostComposer {
             .setNegativeButton("Отмена", null)
             .create()
         dialog.show()
-        UiUtil.styleInputs(box)
 
         val send = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
         send.setOnClickListener {
@@ -318,7 +317,7 @@ object PostComposer {
         val choices = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL }
         fun addChoice() {
             val n = choices.childCount + 1
-            choices.addView(EditText(act).apply { hint = "Вариант $n" }.also { UiUtil.styleInputs(it) })
+            choices.addView(EditText(act).apply { hint = "Вариант $n" })
         }
         addChoice(); addChoice()
         box.addView(choices)
@@ -335,7 +334,7 @@ object PostComposer {
         var span = 0L
         val tvSpan = TextView(act).apply {
             textSize = 15f
-            setTextColor(UiUtil.TEXT)
+            setTextColor(if (UiUtil.isNight(act)) android.graphics.Color.WHITE else UiUtil.TEXT)
             text = "Срок действия: без срока ▾"
             setPadding(0, dp(act, 10), 0, dp(act, 10))
         }
@@ -357,7 +356,6 @@ object PostComposer {
             .setNegativeButton("Отмена", null)
             .create()
         d.show()
-        UiUtil.styleInputs(box)
         d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val title = etTitle.text.toString().trim()
             if (title.isEmpty()) { Toast.makeText(act, "Введите вопрос", Toast.LENGTH_SHORT).show(); return@setOnClickListener }

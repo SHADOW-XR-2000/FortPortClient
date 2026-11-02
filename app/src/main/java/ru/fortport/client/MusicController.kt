@@ -485,7 +485,6 @@ class MusicController(
             val pad = (20 * d).toInt()
             setPadding(pad, (8 * d).toInt(), pad, 0)
             addView(name); addView(artist); addView(genre)
-            UiUtil.styleInputs(this)
         }
         AlertDialog.Builder(activity)
             .setTitle("Редактировать трек")

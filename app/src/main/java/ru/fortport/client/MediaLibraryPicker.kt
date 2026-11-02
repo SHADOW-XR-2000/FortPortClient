@@ -100,7 +100,7 @@ object MediaLibraryPicker {
             items.forEachIndexed { i, item ->
                 val row = LinearLayout(ctx).apply {
                     orientation = LinearLayout.VERTICAL
-                    background = UiUtil.rect(UiUtil.SURFACE_SOFT, if (UiUtil.night) 0xFF3F7F80.toInt() else 0xFF8FDADB.toInt(), 1, 8, ctx)
+                    background = UiUtil.rect(0xFFF2FAFF.toInt(), 0xFF8FDADB.toInt(), 1, 8, ctx)
                     setPadding(dp(ctx, 10), dp(ctx, 8), dp(ctx, 10), dp(ctx, 8))
                     setOnClickListener { choose(item) }
                 }
@@ -121,7 +121,7 @@ object MediaLibraryPicker {
                 } else {
                     ImageView(ctx).apply {
                         scaleType = ImageView.ScaleType.CENTER_CROP
-                        setBackgroundColor(UiUtil.DIVIDER)
+                        setBackgroundColor(0xFFE0E4EC.toInt())
                         host.api.loadImage(this, item.filePath, 256)
                     }
                 }

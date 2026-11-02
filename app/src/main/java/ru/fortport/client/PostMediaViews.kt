@@ -407,6 +407,15 @@ class PollView(
 
     private val selected = HashSet<Long>()
 
+    // Палитра зависит от темы: в тёмной теме карточка поста тёмная, светлый текст по умолчанию не виден.
+    private val night = UiUtil.isNight(context)
+    private val cText = if (night) Color.WHITE else UiUtil.TEXT
+    private val cSub = if (night) 0xFFC8CCD6.toInt() else UiUtil.SUB
+    private val cRow = if (night) 0x33FFFFFF else 0xFFF6F8FA.toInt()
+    private val cRowOn = if (night) 0x663D7BFF else 0xFFD7ECFF.toInt()
+    private val cRowStroke = if (night) 0x66FFFFFF else 0xFFCCCFE0.toInt()
+    private val cBar = if (night) 0x883D7BFF.toInt() else 0x553D7BFF
+
     init {
         orientation = VERTICAL
         setPadding(dp(context, 10), dp(context, 8), dp(context, 10), dp(context, 8))
@@ -418,11 +427,11 @@ class PollView(
     private fun render() {
         removeAllViews()
         val p = data.poll ?: return
-        addView(UiUtil.text(context, 16f, UiUtil.TEXT, bold = true).apply { text = p.title })
+        addView(UiUtil.text(context, 16f, cText, bold = true).apply { text = p.title })
         val showResults = p.hasVoted || expired(p)
         p.choices.forEach { c -> addView(choiceRow(p, c, showResults)) }
 
-        val foot = UiUtil.text(context, 12f, UiUtil.SUB)
+        val foot = UiUtil.text(context, 12f, cSub)
         foot.text = buildString {
             append("Голосов: ${p.totalVotes}")
             if (p.multiChoice) append(" · можно несколько")
@@ -450,9 +459,9 @@ class PollView(
         row.layoutParams = UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP).apply { topMargin = dp(context, 6) }
         val percent = if (results && p.totalVotes > 0) (c.votes * 100f / p.totalVotes).toInt() else 0
         val on = c.userVoted || c.id in selected
-        row.background = UiUtil.rect(if (on && !results) 0xFFD7ECFF.toInt() else 0xFFF6F8FA.toInt(), if (c.userVoted) 0xFF3D7BFF.toInt() else 0xFFCCCFE0.toInt(), 1, 8, context)
+        row.background = UiUtil.rect(if (on && !results) cRowOn else cRow, if (c.userVoted) 0xFF3D7BFF.toInt() else cRowStroke, 1, 8, context)
         if (results) {
-            val bar = View(context).apply { background = UiUtil.rect(0x553D7BFF, 0, 0, 8, context) }
+            val bar = View(context).apply { background = UiUtil.rect(cBar, 0, 0, 8, context) }
             row.addView(bar, UiUtil.frameLp(0, UiUtil.MATCH))
             row.post { bar.layoutParams = bar.layoutParams.apply { width = row.width * percent / 100 }; bar.requestLayout() }
         }
@@ -461,10 +470,10 @@ class PollView(
             setPadding(dp(context, 10), dp(context, 9), dp(context, 10), dp(context, 9))
         }
         line.addView(
-            UiUtil.text(context, 14f, UiUtil.TEXT).apply { text = (if (c.userVoted) "✓ " else "") + c.text },
+            UiUtil.text(context, 14f, cText).apply { text = (if (c.userVoted) "✓ " else "") + c.text },
             UiUtil.lp(0, UiUtil.WRAP, 1f)
         )
-        if (results) line.addView(UiUtil.text(context, 13f, UiUtil.SUB, bold = true).apply { text = "$percent%" })
+        if (results) line.addView(UiUtil.text(context, 13f, cSub, bold = true).apply { text = "$percent%" })
         row.addView(line, UiUtil.frameLp(UiUtil.MATCH, UiUtil.WRAP))
         if (!results) {
             row.setOnClickListener {
