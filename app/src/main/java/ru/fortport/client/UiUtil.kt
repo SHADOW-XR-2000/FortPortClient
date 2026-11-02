@@ -96,10 +96,52 @@ object UiUtil {
 
     fun gone(v: View, gone: Boolean) { v.visibility = if (gone) View.GONE else View.VISIBLE }
 
-    const val BORDER = 0xFF1B2A4A.toInt()
-    const val WHITE = Color.WHITE
-    const val TEXT = 0xFF15141C.toInt()
-    const val SUB = 0xFF555555.toInt()
+    /**
+     * Тема берётся из системной конфигурации: Activity пересоздаётся при смене uiMode
+     * (configChanges его не перехватывает), поэтому все экраны строятся заново с актуальными цветами.
+     */
+    val night: Boolean
+        get() = (android.content.res.Resources.getSystem().configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+    // Палитра «поверхностей»: светлая / тёмная.
+    /** Основной фон блоков (тело поста, поля ввода, плашки). */
+    val SURFACE: Int get() = if (night) 0xFF1B1D26.toInt() else Color.WHITE
+    /** Чуть приподнятая поверхность (чипы, ячейки, активные вкладки). */
+    val SURFACE_ALT: Int get() = if (night) 0xFF262A38.toInt() else 0xFFEAF6FA.toInt()
+    /** Мягкий фон-подсветка (плитки, строки списков). */
+    val SURFACE_SOFT: Int get() = if (night) 0xFF222633.toInt() else 0xFFF2FAFF.toInt()
+    val BORDER: Int get() = if (night) 0xFF4A5A80.toInt() else 0xFF1B2A4A.toInt()
+    /** Тонкие разделители. */
+    val DIVIDER: Int get() = if (night) 0xFF343A4D.toInt() else 0xFFE0E4EC.toInt()
+    val WHITE: Int get() = SURFACE
+    /** Всегда белый — для текста на «royal»-панелях и цветных кнопках. */
+    const val ON_PANEL = Color.WHITE
+    val TEXT: Int get() = if (night) 0xFFF2F2F2.toInt() else 0xFF15141C.toInt()
+    val SUB: Int get() = if (night) 0xFFBDBDBD.toInt() else 0xFF555555.toInt()
+    val HINT: Int get() = if (night) 0xFF9AA0AE.toInt() else 0xFF777777.toInt()
+    val ACCENT_TEXT: Int get() = if (night) 0xFF8FB4FF.toInt() else 0xFF2A62B8.toInt()
+
+    /** Окрашивает EditText/CheckBox/кнопки диалога под текущую тему (для программных форм). */
+    fun styleInputs(root: View) {
+        when (root) {
+            is android.widget.CheckBox -> {
+                root.setTextColor(TEXT)
+                root.buttonTintList = android.content.res.ColorStateList.valueOf(if (night) 0xFF6E9BFF.toInt() else 0xFF3D7BFF.toInt())
+            }
+            is android.widget.EditText -> {
+                root.setTextColor(TEXT); root.setHintTextColor(HINT)
+                root.backgroundTintList = android.content.res.ColorStateList.valueOf(if (night) 0xFF6E9BFF.toInt() else 0xFF3D7BFF.toInt())
+            }
+            is android.widget.Button -> if (night) {
+                root.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF2B4A6B.toInt())
+                root.setTextColor(Color.WHITE)
+            }
+            is android.widget.TextView -> if (root.currentTextColor == 0xFF15141C.toInt()) root.setTextColor(TEXT)
+        }
+        if (root is ViewGroup) for (i in 0 until root.childCount) styleInputs(root.getChildAt(i))
+    }
+
     const val PLUS = 0xFF00BFA5.toInt()
     const val MINUS = 0xFF9C5BFF.toInt()
 }

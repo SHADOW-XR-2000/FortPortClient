@@ -127,12 +127,13 @@ object PostDialogs {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(ctx, 20), dp(ctx, 8), dp(ctx, 20), 0)
         }
-        box.addView(TextView(ctx).apply { text = "Вы уверены, что этот пост нарушает правила?" })
+        box.addView(TextView(ctx).apply { text = "Вы уверены, что этот пост нарушает правила?"; setTextColor(UiUtil.TEXT) })
         val spinner = Spinner(ctx)
         spinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_dropdown_item, FLAG_TYPES.map { it.second })
         box.addView(spinner)
         val notes = EditText(ctx).apply { hint = "Примечания (необязательно)"; maxLines = 4 }
         box.addView(notes)
+        UiUtil.styleInputs(box)
         AlertDialog.Builder(ctx)
             .setTitle("Пожаловаться на пост")
             .setView(box)
@@ -179,7 +180,7 @@ object PostDialogs {
             val cell = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(dp(ctx, 4), dp(ctx, 6), dp(ctx, 4), dp(ctx, 6))
-                background = UiUtil.rect(if (daily) 0xFFE6FFF3.toInt() else 0xFFF6F8FA.toInt(), 0xFFCCCFE0.toInt(), 1, 8, ctx)
+                background = UiUtil.rect(if (daily) (if (UiUtil.night) 0xFF1D3B30.toInt() else 0xFFE6FFF3.toInt()) else UiUtil.SURFACE_SOFT, if (UiUtil.night) 0xFF394057.toInt() else 0xFFCCCFE0.toInt(), 1, 8, ctx)
             }
             val iv = ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
             cell.addView(iv, LinearLayout.LayoutParams(dp(ctx, 64), dp(ctx, 64)))
@@ -215,6 +216,7 @@ object PostDialogs {
         })
         val anon = CheckBox(ctx).apply { text = "Анонимно" }
         box.addView(anon)
+        UiUtil.styleInputs(box)
         val status = UiUtil.text(ctx, 13f, 0xFFC62828.toInt())
         box.addView(status)
 
