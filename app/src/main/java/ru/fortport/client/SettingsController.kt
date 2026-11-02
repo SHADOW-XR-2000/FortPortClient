@@ -60,9 +60,9 @@ class SettingsController(
         const val DEFAULT_MASCOT = "Жека"
         const val TOPBAR_DP = 70
         val TAB_BLUE = 0xFF1F78FF.toInt()
-        val TAB_ACTIVE: Int get() = if (UiUtil.night) 0xFF2B4A6B.toInt() else 0xFFBEF1FC.toInt()
+        val TAB_ACTIVE = 0xFFBEF1FC.toInt()
         val SAVE_TEAL = 0xFF12D9C0.toInt()
-        val LINE: Int get() = if (UiUtil.night) 0xFFC9CEDD.toInt() else 0xFF111111.toInt()
+        val LINE = 0xFF111111.toInt()
         val SEC_KEYS = listOf(
             "showPostsFeed", "showPostsProfile", "showInfoProfile", "anonymousPage", "showFriendsList",
             "showCommunitiesList", "showAudios", "showPhotos", "allowMessagesFrom", "showNSFW"
@@ -126,7 +126,7 @@ class SettingsController(
         host.addView(scroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         pill.textSize = 15f
-        pill.setTextColor(UiUtil.ON_PANEL)
+        pill.setTextColor(UiUtil.WHITE)
         pill.setPadding(dp(18), dp(10), dp(18), dp(10))
         pill.visibility = View.GONE
         pill.elevation = dp(6).toFloat()
@@ -509,7 +509,7 @@ class SettingsController(
         return tv
     }
 
-    private fun button(text: String, onClick: () -> Unit): TextView = UiUtil.text(activity, 20f, UiUtil.ON_PANEL, bold = true).apply {
+    private fun button(text: String, onClick: () -> Unit): TextView = UiUtil.text(activity, 20f, UiUtil.WHITE, bold = true).apply {
         this.text = text
         gravity = Gravity.CENTER
         background = UiUtil.rect(SAVE_TEAL, LINE, 2, 14, activity)
@@ -518,14 +518,14 @@ class SettingsController(
 
     private fun imageCell(kind: Img, label: String): FrameLayout {
         val cell = FrameLayout(activity)
-        cell.background = UiUtil.rect(UiUtil.SURFACE_ALT, LINE, 2, 10, activity)
+        cell.background = UiUtil.rect(0xFFEEEEEE.toInt(), LINE, 2, 10, activity)
         cell.clipToOutline = true
         cell.outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: Outline) { outline.setRoundRect(0, 0, view.width, view.height, dp(10).toFloat()) }
         }
         val iv = ImageView(activity).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         cell.addView(iv, FrameLayout.LayoutParams(UiUtil.MATCH, UiUtil.MATCH))
-        val tag = UiUtil.text(activity, 12f, UiUtil.ON_PANEL).apply {
+        val tag = UiUtil.text(activity, 12f, UiUtil.WHITE).apply {
             text = label
             gravity = Gravity.CENTER
             setBackgroundColor(0x99000000.toInt())

@@ -38,7 +38,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
 
     init {
         orientation = VERTICAL
-        background = UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 6, context)
+        background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 6, context)
         setPadding(dp(context, 2), dp(context, 2), dp(context, 2), dp(context, 2))
         clipToOutline = true
         bodyHolder.orientation = VERTICAL
@@ -172,7 +172,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
         awardsHolder.removeAllViews()
         val ctx = context
         awardsHolder.setPadding(dp(ctx, 8), dp(ctx, 4), dp(ctx, 8), dp(ctx, 4))
-        awardsHolder.background = UiUtil.rect(UiUtil.SURFACE, UiUtil.DIVIDER, 1, 0, ctx)
+        awardsHolder.background = UiUtil.rect(Color.WHITE, 0xFFE0E4EC.toInt(), 1, 0, ctx)
         val list = p.awards
         val scroll = HorizontalScrollView(ctx).apply { isHorizontalScrollBarEnabled = false }
         val icons = LinearLayout(ctx).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -199,7 +199,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
         awardsHolder.addView(scroll, UiUtil.lp(0, UiUtil.WRAP, 1f))
         val give = TextView(ctx).apply {
             text = "Наградить"; textSize = 13f; setTextColor(0xFFE67E22.toInt()); gravity = Gravity.CENTER
-            background = UiUtil.rect(UiUtil.SURFACE, 0xFFE67E22.toInt(), 2, 10, ctx)
+            background = UiUtil.rect(Color.WHITE, 0xFFE67E22.toInt(), 2, 10, ctx)
             setPadding(dp(ctx, 10), dp(ctx, 5), dp(ctx, 10), dp(ctx, 5))
         }
         give.setOnClickListener {
@@ -305,7 +305,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
             text = "- Балл"; textSize = 15f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
         }
         val count = UiUtil.text(ctx, 16f, UiUtil.TEXT, bold = true).apply {
-            gravity = Gravity.CENTER; setBackgroundColor(UiUtil.SURFACE)
+            gravity = Gravity.CENTER; setBackgroundColor(Color.WHITE)
         }
         fun paint() {
             plus.setBackgroundColor(if (p.likedByMe) 0xFF008C79.toInt() else UiUtil.PLUS)

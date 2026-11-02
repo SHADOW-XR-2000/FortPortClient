@@ -67,7 +67,7 @@ class ComposerView(
             textSize = 15f
             setTextColor(UiUtil.TEXT)
             setHintTextColor(UiUtil.SUB)
-            background = UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 4, context)
+            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, context)
             setPadding(dp(context, 10), dp(context, 8), dp(context, 10), dp(context, 8))
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                 android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
@@ -425,7 +425,7 @@ class PostPageController(
     }
 
     private fun paintLike(btn: TextView, liked: Boolean) {
-        btn.background = UiUtil.rect(if (liked) (if (UiUtil.night) 0xFF1D4A3C.toInt() else 0xFFD6FFEF.toInt()) else UiUtil.SURFACE, 0xFF2AF0B0.toInt(), 2, 8, activity)
+        btn.background = UiUtil.rect(if (liked) 0xFFD6FFEF.toInt() else Color.WHITE, 0xFF2AF0B0.toInt(), 2, 8, activity)
         btn.setTypeface(null, if (liked) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
     }
 
@@ -663,7 +663,7 @@ class PostPageController(
         }
         val counter = UiUtil.text(ctx, 14f, UiUtil.TEXT, bold = true).apply {
             text = c.likeCount.toString(); gravity = Gravity.CENTER
-            background = UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 8, ctx)
+            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 8, ctx)
             setPadding(dp(ctx, 12), dp(ctx, 6), dp(ctx, 12), dp(ctx, 6))
         }
         paintLike(like, c.likedByMe)
