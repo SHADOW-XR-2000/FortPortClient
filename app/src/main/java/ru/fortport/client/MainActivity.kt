@@ -192,8 +192,8 @@ class MainActivity : AppCompatActivity() {
         sectionHeaderAction = findViewById(R.id.sectionHeaderAction)
         // Основные верхняя (аватар, CD, уведомления) и нижняя (музыка, порты, пост/домой, друзья, переписки)
         // панели рисуются картинками из assets/ui (*_royal_panel-invert.png); нет файла — прежний цвет.
-        // Шапки разделов и остальные панели не трогаем, как и шаблоны постов (UiUtil.royal).
-        listOf(topNavBar, bottomNavBar).forEach { bar ->
+        // То же — у шапок разделов (музыка, порты, друзья, переписки), поста, настроек и панели уведомлений. Шаблоны постов не трогаем (UiUtil.royal).
+        listOf(topNavBar, bottomNavBar, sectionHeader, postTopBar, settingsTopBar, notifBottomBar).forEach { bar ->
             UiUtil.barSkin(this)?.let { bar.background = it }
         }
         siteApi = SiteApi(this)
