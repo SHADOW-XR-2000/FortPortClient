@@ -354,8 +354,8 @@ class FeedController(
             setPadding(dp(ctx, 10), dp(ctx, 8), dp(ctx, 10), dp(ctx, 8))
         }
         fun btn(glyph: String, click: () -> Unit) = TextView(ctx).apply {
-            text = glyph; textSize = 22f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
-            background = UiUtil.rect(0x33FFFFFF, Color.WHITE, 2, 8, ctx)
+            text = glyph; textSize = 22f; gravity = Gravity.CENTER
+            AeroButton.style(this)
             setOnClickListener { click() }
         }
         row.addView(btn("🔍") { showSearchStub() }, LinearLayout.LayoutParams(dp(ctx, 44), dp(ctx, 44)))

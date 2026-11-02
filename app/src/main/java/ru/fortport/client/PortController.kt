@@ -425,14 +425,14 @@ class PortController(
         }
 
         // Действие: редактировать / отключиться / присоединиться (как на сайте).
-        val action = UiUtil.text(ctx, 14f, if (i.subscribed && !i.canEdit) UiUtil.ink(ctx) else Color.WHITE).apply {
+        val action = UiUtil.text(ctx, 14f, UiUtil.ink(ctx)).apply {
             gravity = Gravity.CENTER
             text = when {
                 i.canEdit -> "Редактировать"
                 i.subscribed -> "Отключиться"
                 else -> "Присоединиться"
             }
-            background = if (i.subscribed && !i.canEdit) UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 6, ctx) else UiUtil.royal(ctx)
+            AeroButton.style(this)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
             setOnClickListener {
                 when {
@@ -450,7 +450,7 @@ class PortController(
 
         val openBtn = UiUtil.text(ctx, 14f, BLUE).apply {
             text = "Правила"; gravity = Gravity.CENTER
-            background = UiUtil.rect(UiUtil.cardBg(ctx), BLUE, 2, 4, ctx)
+            AeroButton.style(this)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
         }
         val block = LinearLayout(ctx).apply {
@@ -465,7 +465,7 @@ class PortController(
         }
         val hideBtn = UiUtil.text(ctx, 14f, UiUtil.ink(ctx)).apply {
             text = "Скрыть"; gravity = Gravity.CENTER
-            background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 4, ctx)
+            AeroButton.style(this)
             setPadding(dp(ctx, 8), dp(ctx, 6), dp(ctx, 8), dp(ctx, 6))
         }
         openBtn.setOnClickListener {

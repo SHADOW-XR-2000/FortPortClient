@@ -431,8 +431,7 @@ class ProfileController(
             text = label
             textSize = 14f
             gravity = Gravity.CENTER
-            setTextColor(if (primary) Color.WHITE else UiUtil.ink(ctx))
-            background = if (primary) UiUtil.royal(ctx) else UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 6, ctx)
+            AeroButton.style(this)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
             setOnClickListener { click() }
         }
@@ -559,7 +558,7 @@ class ProfileController(
         // «Подробнее» (4.2): блок раскрывается с анимацией, «Скрыть» убирает его.
         val moreBtn = UiUtil.text(ctx, 14f, BLUE).apply {
             text = "Подробнее"; gravity = Gravity.CENTER
-            background = UiUtil.rect(UiUtil.cardBg(ctx), BLUE, 2, 4, ctx)
+            AeroButton.style(this)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
         }
         val block = LinearLayout(ctx).apply {
@@ -608,7 +607,7 @@ class ProfileController(
 
         val hideBtn = UiUtil.text(ctx, 14f, UiUtil.ink(ctx)).apply {
             text = "Скрыть"; gravity = Gravity.CENTER
-            background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 4, ctx)
+            AeroButton.style(this)
             setPadding(dp(ctx, 8), dp(ctx, 6), dp(ctx, 8), dp(ctx, 6))
         }
 

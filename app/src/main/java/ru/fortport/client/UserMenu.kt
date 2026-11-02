@@ -137,8 +137,7 @@ class UserMenu(
             text = "Пополнить"
             isAllCaps = false
             textSize = 15f
-            setTextColor(0xFF15141C.toInt())
-            background = UiUtil.rect(0xFFD9D9D9.toInt(), 0xFF555555.toInt(), 2, 8, activity)
+            AeroButton.style(this)
             minHeight = 0; minimumHeight = 0
             setPadding(dp(14), dp(8), dp(14), dp(8))
             setOnClickListener { act(onTopUp) }
