@@ -179,12 +179,12 @@ object PostDialogs {
             val cell = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(dp(ctx, 4), dp(ctx, 6), dp(ctx, 4), dp(ctx, 6))
-                background = UiUtil.rect(if (daily) 0xFFE6FFF3.toInt() else 0xFFF6F8FA.toInt(), 0xFFCCCFE0.toInt(), 1, 8, ctx)
+                background = UiUtil.rect(if (daily) 0xFFE6FFF3.toInt() else UiUtil.softBg(ctx), UiUtil.softStroke(ctx), 1, 8, ctx)
             }
             val iv = ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
             cell.addView(iv, LinearLayout.LayoutParams(dp(ctx, 64), dp(ctx, 64)))
             host.api.loadImage(iv, awardImagePath(a.image, big = false), 256)
-            cell.addView(UiUtil.text(ctx, 12f, UiUtil.TEXT, maxLines = 2).apply { text = a.name; gravity = Gravity.CENTER })
+            cell.addView(UiUtil.text(ctx, 12f, UiUtil.ink(ctx), maxLines = 2).apply { text = a.name; gravity = Gravity.CENTER })
             cell.addView(UiUtil.text(ctx, 11f, if (daily) 0xFF0A8F54.toInt() else UiUtil.SUB, bold = daily).apply {
                 text = if (daily) "Бесплатно сегодня" else "${a.price} CD"; gravity = Gravity.CENTER
             })

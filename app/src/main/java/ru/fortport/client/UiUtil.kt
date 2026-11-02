@@ -96,6 +96,14 @@ object UiUtil {
 
     fun gone(v: View, gone: Boolean) { v.visibility = if (gone) View.GONE else View.VISIBLE }
 
+    // Тёмная тема: основа поста и подложки — тёмные, текст светлый.
+    fun cardBg(ctx: Context) = if (isNight(ctx)) 0xFF1B1D26.toInt() else Color.WHITE
+    fun ink(ctx: Context) = if (isNight(ctx)) 0xFFF2F2F2.toInt() else TEXT
+    fun sub(ctx: Context) = if (isNight(ctx)) 0xFFBDBDBD.toInt() else SUB
+    fun softBg(ctx: Context) = if (isNight(ctx)) 0xFF2A2F40.toInt() else 0xFFF6F8FA.toInt()
+    fun softStroke(ctx: Context) = if (isNight(ctx)) 0xFF454D66.toInt() else 0xFFCCCFE0.toInt()
+    fun cardStroke(ctx: Context) = if (isNight(ctx)) 0xFF000000.toInt() else BORDER
+
     const val BORDER = 0xFF1B2A4A.toInt()
     const val WHITE = Color.WHITE
     const val TEXT = 0xFF15141C.toInt()
