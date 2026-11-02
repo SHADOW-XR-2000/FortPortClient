@@ -359,7 +359,7 @@ class PortController(
         val i = info
         if (i == null) {
             card.addView(
-                UiUtil.text(ctx, 15f, UiUtil.SUB).apply {
+                UiUtil.text(ctx, 15f, UiUtil.sub(ctx)).apply {
                     gravity = Gravity.CENTER
                     setPadding(dp(ctx, 12), dp(ctx, 24), dp(ctx, 12), dp(ctx, 24))
                     text = when {
@@ -405,7 +405,7 @@ class PortController(
         card.addView(body, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP))
 
         fun line(s: String, bold: Boolean = false) {
-            body.addView(UiUtil.text(ctx, 14f, UiUtil.TEXT, bold = bold).apply {
+            body.addView(UiUtil.text(ctx, 14f, UiUtil.ink(ctx), bold = bold).apply {
                 text = s; setPadding(0, dp(ctx, 2), 0, dp(ctx, 2))
             })
         }
@@ -416,7 +416,7 @@ class PortController(
         }
         line(if (i.type == "page") "Страница" else "Сообщество")
         if (i.description.isNotBlank()) {
-            body.addView(UiUtil.text(ctx, 15f, UiUtil.TEXT).apply {
+            body.addView(UiUtil.text(ctx, 15f, UiUtil.ink(ctx)).apply {
                 text = i.description.replace("\r\n", "\n")
                 setPadding(0, dp(ctx, 8), 0, dp(ctx, 4))
                 Linkify.addLinks(this, Linkify.WEB_URLS)
@@ -425,14 +425,14 @@ class PortController(
         }
 
         // Действие: редактировать / отключиться / присоединиться (как на сайте).
-        val action = UiUtil.text(ctx, 14f, if (i.subscribed && !i.canEdit) UiUtil.TEXT else Color.WHITE).apply {
+        val action = UiUtil.text(ctx, 14f, if (i.subscribed && !i.canEdit) UiUtil.ink(ctx) else Color.WHITE).apply {
             gravity = Gravity.CENTER
             text = when {
                 i.canEdit -> "Редактировать"
                 i.subscribed -> "Отключиться"
                 else -> "Присоединиться"
             }
-            background = if (i.subscribed && !i.canEdit) UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 6, ctx) else UiUtil.royal(ctx)
+            background = if (i.subscribed && !i.canEdit) UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 6, ctx) else UiUtil.royal(ctx)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
             setOnClickListener {
                 when {
@@ -450,22 +450,22 @@ class PortController(
 
         val openBtn = UiUtil.text(ctx, 14f, BLUE).apply {
             text = "Правила"; gravity = Gravity.CENTER
-            background = UiUtil.rect(Color.WHITE, BLUE, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.cardBg(ctx), BLUE, 2, 4, ctx)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
         }
         val block = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 4, ctx)
             setPadding(dp(ctx, 12), dp(ctx, 8), dp(ctx, 12), dp(ctx, 12))
         }
         rules.forEach { r ->
-            block.addView(UiUtil.text(ctx, 15f, UiUtil.TEXT).apply {
+            block.addView(UiUtil.text(ctx, 15f, UiUtil.ink(ctx)).apply {
                 text = r; setPadding(0, dp(ctx, 4), 0, dp(ctx, 4))
             })
         }
-        val hideBtn = UiUtil.text(ctx, 14f, UiUtil.TEXT).apply {
+        val hideBtn = UiUtil.text(ctx, 14f, UiUtil.ink(ctx)).apply {
             text = "Скрыть"; gravity = Gravity.CENTER
-            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 4, ctx)
             setPadding(dp(ctx, 8), dp(ctx, 6), dp(ctx, 8), dp(ctx, 6))
         }
         openBtn.setOnClickListener {
@@ -551,7 +551,7 @@ class PortController(
                 HEADER -> {
                     val card = LinearLayout(ctx).apply {
                         orientation = LinearLayout.VERTICAL
-                        background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 6, ctx)
+                        background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 6, ctx)
                         setPadding(dp(ctx, 2), dp(ctx, 2), dp(ctx, 2), dp(ctx, 2))
                     }
                     margins(card, 12)
@@ -563,7 +563,7 @@ class PortController(
                     object : RecyclerView.ViewHolder(card) {}
                 }
                 else -> {
-                    val t = UiUtil.text(ctx, 14f, UiUtil.SUB).apply {
+                    val t = UiUtil.text(ctx, 14f, UiUtil.sub(ctx)).apply {
                         gravity = Gravity.CENTER
                         setPadding(dp(ctx, 12), dp(ctx, 16), dp(ctx, 12), dp(ctx, 16))
                     }

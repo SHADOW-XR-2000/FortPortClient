@@ -431,8 +431,8 @@ class ProfileController(
             text = label
             textSize = 14f
             gravity = Gravity.CENTER
-            setTextColor(if (primary) Color.WHITE else UiUtil.TEXT)
-            background = if (primary) UiUtil.royal(ctx) else UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 6, ctx)
+            setTextColor(if (primary) Color.WHITE else UiUtil.ink(ctx))
+            background = if (primary) UiUtil.royal(ctx) else UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 6, ctx)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
             setOnClickListener { click() }
         }
@@ -444,7 +444,7 @@ class ProfileController(
             setPadding(0, dp(ctx, 4), 0, dp(ctx, 4))
             addView(ImageView(ctx).apply { setImageBitmap(asset(iconPath)) }, UiUtil.lp(dp(ctx, 26), dp(ctx, 26)))
             addView(
-                UiUtil.text(ctx, 16f, UiUtil.TEXT, bold = true).apply { text = label },
+                UiUtil.text(ctx, 16f, UiUtil.ink(ctx), bold = true).apply { text = label },
                 UiUtil.lp(0, UiUtil.WRAP, 1f).apply { marginStart = dp(ctx, 8) }
             )
         }
@@ -454,7 +454,7 @@ class ProfileController(
         val ctx = card.context
         val i = info
         if (i == null) {
-            val t = UiUtil.text(ctx, 15f, UiUtil.SUB).apply {
+            val t = UiUtil.text(ctx, 15f, UiUtil.sub(ctx)).apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(ctx, 12), dp(ctx, 24), dp(ctx, 12), dp(ctx, 24))
                 text = when {
@@ -510,7 +510,7 @@ class ProfileController(
         if (!b?.city.isNullOrBlank()) body.addView(iconLine(ctx, "ui/icons/mini_map.webp", b!!.city))
         if (!b?.birth.isNullOrBlank()) body.addView(iconLine(ctx, "ui/icons/mini_cake.webp", b!!.birth))
         if (!b?.description.isNullOrBlank()) {
-            body.addView(UiUtil.text(ctx, 15f, UiUtil.TEXT).apply {
+            body.addView(UiUtil.text(ctx, 15f, UiUtil.ink(ctx)).apply {
                 text = b!!.description.replace("\r\n", "\n")
                 setPadding(0, dp(ctx, 8), 0, dp(ctx, 4))
                 Linkify.addLinks(this, Linkify.WEB_URLS)
@@ -559,19 +559,19 @@ class ProfileController(
         // «Подробнее» (4.2): блок раскрывается с анимацией, «Скрыть» убирает его.
         val moreBtn = UiUtil.text(ctx, 14f, BLUE).apply {
             text = "Подробнее"; gravity = Gravity.CENTER
-            background = UiUtil.rect(Color.WHITE, BLUE, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.cardBg(ctx), BLUE, 2, 4, ctx)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
         }
         val block = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 4, ctx)
             setPadding(dp(ctx, 12), dp(ctx, 8), dp(ctx, 12), dp(ctx, 12))
         }
         fun field(label: String, value: String?) {
             if (value.isNullOrBlank()) return
             block.addView(TextView(ctx).apply {
                 textSize = 15f
-                setTextColor(UiUtil.TEXT)
+                setTextColor(UiUtil.ink(ctx))
                 text = android.text.SpannableStringBuilder().apply {
                     append("$label: ")
                     setSpan(android.text.style.ForegroundColorSpan(LABEL), 0, length, 0)
@@ -590,11 +590,11 @@ class ProfileController(
                 LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, ctx)
+                    background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 4, ctx)
                     setPadding(dp(ctx, 10), dp(ctx, 8), dp(ctx, 10), dp(ctx, 8))
                     addView(ImageView(ctx).apply { setImageBitmap(asset(icon)) }, UiUtil.lp(dp(ctx, 32), dp(ctx, 32)))
                     addView(
-                        UiUtil.text(ctx, 15f, UiUtil.TEXT).apply { text = label; gravity = Gravity.CENTER },
+                        UiUtil.text(ctx, 15f, UiUtil.ink(ctx)).apply { text = label; gravity = Gravity.CENTER },
                         UiUtil.lp(0, UiUtil.WRAP, 1f)
                     )
                     setOnClickListener { click() }
@@ -606,9 +606,9 @@ class ProfileController(
         link("ui/icons/communities_aero.webp", "Порты пользователя") { onOpenPorts(i.id) }
         link("ui/icons/friends_aero.webp", "Друзья пользователя") { onOpenFriends(i.id) }
 
-        val hideBtn = UiUtil.text(ctx, 14f, UiUtil.TEXT).apply {
+        val hideBtn = UiUtil.text(ctx, 14f, UiUtil.ink(ctx)).apply {
             text = "Скрыть"; gravity = Gravity.CENTER
-            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 4, ctx)
             setPadding(dp(ctx, 8), dp(ctx, 6), dp(ctx, 8), dp(ctx, 6))
         }
 
@@ -696,7 +696,7 @@ class ProfileController(
                 HEADER -> {
                     val card = LinearLayout(ctx).apply {
                         orientation = LinearLayout.VERTICAL
-                        background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 6, ctx)
+                        background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 6, ctx)
                         setPadding(dp(ctx, 2), dp(ctx, 2), dp(ctx, 2), dp(ctx, 2))
                     }
                     margins(card, 12)
@@ -708,7 +708,7 @@ class ProfileController(
                     object : RecyclerView.ViewHolder(card) {}
                 }
                 else -> {
-                    val t = UiUtil.text(ctx, 14f, UiUtil.SUB).apply {
+                    val t = UiUtil.text(ctx, 14f, UiUtil.sub(ctx)).apply {
                         gravity = Gravity.CENTER
                         setPadding(dp(ctx, 12), dp(ctx, 16), dp(ctx, 12), dp(ctx, 16))
                     }
