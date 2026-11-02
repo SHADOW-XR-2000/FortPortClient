@@ -432,7 +432,7 @@ class PortController(
                 i.subscribed -> "Отключиться"
                 else -> "Присоединиться"
             }
-            background = if (i.subscribed && !i.canEdit) UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 6, ctx) else UiUtil.royal(ctx)
+            background = if (i.subscribed && !i.canEdit) UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 6, ctx) else UiUtil.royal(ctx)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
             setOnClickListener {
                 when {
@@ -450,12 +450,12 @@ class PortController(
 
         val openBtn = UiUtil.text(ctx, 14f, BLUE).apply {
             text = "Правила"; gravity = Gravity.CENTER
-            background = UiUtil.rect(Color.WHITE, BLUE, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.SURFACE, BLUE, 2, 4, ctx)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
         }
         val block = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 4, ctx)
             setPadding(dp(ctx, 12), dp(ctx, 8), dp(ctx, 12), dp(ctx, 12))
         }
         rules.forEach { r ->
@@ -465,7 +465,7 @@ class PortController(
         }
         val hideBtn = UiUtil.text(ctx, 14f, UiUtil.TEXT).apply {
             text = "Скрыть"; gravity = Gravity.CENTER
-            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 4, ctx)
             setPadding(dp(ctx, 8), dp(ctx, 6), dp(ctx, 8), dp(ctx, 6))
         }
         openBtn.setOnClickListener {
@@ -551,7 +551,7 @@ class PortController(
                 HEADER -> {
                     val card = LinearLayout(ctx).apply {
                         orientation = LinearLayout.VERTICAL
-                        background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 6, ctx)
+                        background = UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 6, ctx)
                         setPadding(dp(ctx, 2), dp(ctx, 2), dp(ctx, 2), dp(ctx, 2))
                     }
                     margins(card, 12)

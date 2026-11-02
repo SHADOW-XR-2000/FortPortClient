@@ -432,7 +432,7 @@ class ProfileController(
             textSize = 14f
             gravity = Gravity.CENTER
             setTextColor(if (primary) Color.WHITE else UiUtil.TEXT)
-            background = if (primary) UiUtil.royal(ctx) else UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 6, ctx)
+            background = if (primary) UiUtil.royal(ctx) else UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 6, ctx)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
             setOnClickListener { click() }
         }
@@ -559,12 +559,12 @@ class ProfileController(
         // «Подробнее» (4.2): блок раскрывается с анимацией, «Скрыть» убирает его.
         val moreBtn = UiUtil.text(ctx, 14f, BLUE).apply {
             text = "Подробнее"; gravity = Gravity.CENTER
-            background = UiUtil.rect(Color.WHITE, BLUE, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.SURFACE, BLUE, 2, 4, ctx)
             setPadding(dp(ctx, 8), dp(ctx, 10), dp(ctx, 8), dp(ctx, 10))
         }
         val block = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 4, ctx)
             setPadding(dp(ctx, 12), dp(ctx, 8), dp(ctx, 12), dp(ctx, 12))
         }
         fun field(label: String, value: String?) {
@@ -590,7 +590,7 @@ class ProfileController(
                 LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, ctx)
+                    background = UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 4, ctx)
                     setPadding(dp(ctx, 10), dp(ctx, 8), dp(ctx, 10), dp(ctx, 8))
                     addView(ImageView(ctx).apply { setImageBitmap(asset(icon)) }, UiUtil.lp(dp(ctx, 32), dp(ctx, 32)))
                     addView(
@@ -608,7 +608,7 @@ class ProfileController(
 
         val hideBtn = UiUtil.text(ctx, 14f, UiUtil.TEXT).apply {
             text = "Скрыть"; gravity = Gravity.CENTER
-            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, ctx)
+            background = UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 4, ctx)
             setPadding(dp(ctx, 8), dp(ctx, 6), dp(ctx, 8), dp(ctx, 6))
         }
 
@@ -696,7 +696,7 @@ class ProfileController(
                 HEADER -> {
                     val card = LinearLayout(ctx).apply {
                         orientation = LinearLayout.VERTICAL
-                        background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 6, ctx)
+                        background = UiUtil.rect(UiUtil.SURFACE, UiUtil.BORDER, 2, 6, ctx)
                         setPadding(dp(ctx, 2), dp(ctx, 2), dp(ctx, 2), dp(ctx, 2))
                     }
                     margins(card, 12)
