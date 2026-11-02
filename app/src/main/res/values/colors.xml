@@ -14,4 +14,5 @@
     <color name="fp_chat_time">#777777</color>
     <color name="fp_music_player_bg">#E6FFFFFF</color>
     <color name="fp_audio_row_active">#66BEF1FC</color>
+    <color name="fp_status_bar">#3262BA</color>
 </resources>
