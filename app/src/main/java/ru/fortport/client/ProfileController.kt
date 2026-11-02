@@ -589,11 +589,12 @@ class ProfileController(
                 LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 4, ctx)
+                    background = AeroButton.background(ctx)
+                    isClickable = true; isFocusable = true
                     setPadding(dp(ctx, 10), dp(ctx, 8), dp(ctx, 10), dp(ctx, 8))
                     addView(ImageView(ctx).apply { setImageBitmap(asset(icon)) }, UiUtil.lp(dp(ctx, 32), dp(ctx, 32)))
                     addView(
-                        UiUtil.text(ctx, 15f, UiUtil.ink(ctx)).apply { text = label; gravity = Gravity.CENTER },
+                        UiUtil.text(ctx, 15f, AeroButton.textColor(ctx)).apply { text = label; gravity = Gravity.CENTER },
                         UiUtil.lp(0, UiUtil.WRAP, 1f)
                     )
                     setOnClickListener { click() }
