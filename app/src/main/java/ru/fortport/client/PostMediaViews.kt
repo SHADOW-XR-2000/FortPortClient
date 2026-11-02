@@ -297,13 +297,13 @@ class AudioRowView(
     private val key = "audio:" + item.path
     private val play = TextView(context)
     private val seek = SeekBar(context)
-    private val time = UiUtil.text(context, 12f, UiUtil.SUB)
+    private val time = UiUtil.text(context, 12f, UiUtil.sub(context))
     private var userSeeking = false
 
     init {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        background = UiUtil.rect(0xFFF2FAFF.toInt(), 0xFF8FDADB.toInt(), 2, 10, context)
+        background = UiUtil.rect(if (UiUtil.isNight(context)) 0xFF1F2B33.toInt() else 0xFFF2FAFF.toInt(), 0xFF8FDADB.toInt(), 2, 10, context)
         setPadding(dp(context, 8), dp(context, 6), dp(context, 4), dp(context, 6))
 
         play.apply {
@@ -314,7 +314,7 @@ class AudioRowView(
 
         val mid = LinearLayout(context).apply { orientation = VERTICAL }
         mid.addView(
-            UiUtil.text(context, 14f, UiUtil.TEXT, bold = true, maxLines = 1).apply {
+            UiUtil.text(context, 14f, UiUtil.ink(context), bold = true, maxLines = 1).apply {
                 text = item.name.ifBlank { "Аудио" }
             }
         )
@@ -409,12 +409,12 @@ class PollView(
 
     // Палитра зависит от темы: в тёмной теме карточка поста тёмная, светлый текст по умолчанию не виден.
     private val night = UiUtil.isNight(context)
-    private val cText = if (night) Color.WHITE else UiUtil.TEXT
-    private val cSub = if (night) 0xFFC8CCD6.toInt() else UiUtil.SUB
-    private val cRow = if (night) 0x33FFFFFF else 0xFFF6F8FA.toInt()
-    private val cRowOn = if (night) 0x663D7BFF else 0xFFD7ECFF.toInt()
-    private val cRowStroke = if (night) 0x66FFFFFF else 0xFFCCCFE0.toInt()
-    private val cBar = if (night) 0x883D7BFF.toInt() else 0x553D7BFF
+    private val cText = UiUtil.ink(context)
+    private val cSub = UiUtil.sub(context)
+    private val cRow = UiUtil.softBg(context)
+    private val cRowOn = if (night) 0xFF2F3F66.toInt() else 0xFFD7ECFF.toInt()
+    private val cRowStroke = UiUtil.softStroke(context)
+    private val cBar = if (night) 0xFF3D5FB5.toInt() else 0x553D7BFF
 
     init {
         orientation = VERTICAL
@@ -447,8 +447,8 @@ class PollView(
     }
 
     private fun button(t: String, click: () -> Unit) = TextView(context).apply {
-        text = t; textSize = 14f; gravity = Gravity.CENTER; setTextColor(0xFF1B6FD1.toInt())
-        background = UiUtil.rect(Color.WHITE, 0xFF29A3FF.toInt(), 1, 8, context)
+        text = t; textSize = 14f; gravity = Gravity.CENTER; setTextColor(if (night) 0xFF7DB8FF.toInt() else 0xFF1B6FD1.toInt())
+        background = UiUtil.rect(UiUtil.cardBg(context), 0xFF29A3FF.toInt(), 1, 8, context)
         setPadding(dp(context, 12), dp(context, 8), dp(context, 12), dp(context, 8))
         layoutParams = UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP).apply { topMargin = dp(context, 6) }
         setOnClickListener { click() }

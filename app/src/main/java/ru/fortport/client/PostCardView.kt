@@ -38,7 +38,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
 
     init {
         orientation = VERTICAL
-        background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 6, context)
+        background = UiUtil.rect(UiUtil.cardBg(context), UiUtil.cardStroke(context), 2, 6, context)
         setPadding(dp(context, 2), dp(context, 2), dp(context, 2), dp(context, 2))
         clipToOutline = true
         bodyHolder.orientation = VERTICAL
@@ -172,7 +172,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
         awardsHolder.removeAllViews()
         val ctx = context
         awardsHolder.setPadding(dp(ctx, 8), dp(ctx, 4), dp(ctx, 8), dp(ctx, 4))
-        awardsHolder.background = UiUtil.rect(Color.WHITE, 0xFFE0E4EC.toInt(), 1, 0, ctx)
+        awardsHolder.background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.softStroke(ctx), 1, 0, ctx)
         val list = p.awards
         val scroll = HorizontalScrollView(ctx).apply { isHorizontalScrollBarEnabled = false }
         val icons = LinearLayout(ctx).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -199,7 +199,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
         awardsHolder.addView(scroll, UiUtil.lp(0, UiUtil.WRAP, 1f))
         val give = TextView(ctx).apply {
             text = "Наградить"; textSize = 13f; setTextColor(0xFFE67E22.toInt()); gravity = Gravity.CENTER
-            background = UiUtil.rect(Color.WHITE, 0xFFE67E22.toInt(), 2, 10, ctx)
+            background = UiUtil.rect(UiUtil.cardBg(ctx), 0xFFE67E22.toInt(), 2, 10, ctx)
             setPadding(dp(ctx, 10), dp(ctx, 5), dp(ctx, 10), dp(ctx, 5))
         }
         give.setOnClickListener {
@@ -258,7 +258,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
 
         if (p.title.isNotBlank()) {
             bodyHolder.addView(
-                UiUtil.text(ctx, 18f, UiUtil.TEXT, bold = true).apply {
+                UiUtil.text(ctx, 18f, UiUtil.ink(ctx), bold = true).apply {
                     text = p.title
                     setPadding(dp(ctx, 12), dp(ctx, 10), dp(ctx, 12), dp(ctx, 6))
                 },
@@ -282,7 +282,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
             bodyHolder.addView(PollView(ctx, host.repo, p) { }, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP))
         }
         if (p.content.isNotBlank()) {
-            val t = UiUtil.text(ctx, 15f, UiUtil.TEXT).apply {
+            val t = UiUtil.text(ctx, 15f, UiUtil.ink(ctx)).apply {
                 text = p.content.replace("\r\n", "\n")
                 setPadding(dp(ctx, 12), dp(ctx, 10), dp(ctx, 12), dp(ctx, 10))
                 setTextIsSelectable(false)
@@ -304,8 +304,8 @@ class PostCardView(context: Context) : LinearLayout(context) {
         val minus = TextView(ctx).apply {
             text = "- Балл"; textSize = 15f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
         }
-        val count = UiUtil.text(ctx, 16f, UiUtil.TEXT, bold = true).apply {
-            gravity = Gravity.CENTER; setBackgroundColor(Color.WHITE)
+        val count = UiUtil.text(ctx, 16f, UiUtil.ink(ctx), bold = true).apply {
+            gravity = Gravity.CENTER; setBackgroundColor(UiUtil.cardBg(ctx))
         }
         fun paint() {
             plus.setBackgroundColor(if (p.likedByMe) 0xFF008C79.toInt() else UiUtil.PLUS)

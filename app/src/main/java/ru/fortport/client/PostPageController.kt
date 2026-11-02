@@ -65,9 +65,9 @@ class ComposerView(
             maxLines = 8
             gravity = Gravity.TOP or Gravity.START
             textSize = 15f
-            setTextColor(UiUtil.TEXT)
-            setHintTextColor(UiUtil.SUB)
-            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 4, context)
+            setTextColor(UiUtil.ink(context))
+            setHintTextColor(UiUtil.sub(context))
+            background = UiUtil.rect(UiUtil.cardBg(context), UiUtil.cardStroke(context), 2, 4, context)
             setPadding(dp(context, 10), dp(context, 8), dp(context, 10), dp(context, 8))
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                 android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
@@ -425,7 +425,7 @@ class PostPageController(
     }
 
     private fun paintLike(btn: TextView, liked: Boolean) {
-        btn.background = UiUtil.rect(if (liked) 0xFFD6FFEF.toInt() else Color.WHITE, 0xFF2AF0B0.toInt(), 2, 8, activity)
+        btn.background = UiUtil.rect(if (liked) 0xFFD6FFEF.toInt() else UiUtil.cardBg(activity), 0xFF2AF0B0.toInt(), 2, 8, activity)
         btn.setTypeface(null, if (liked) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
     }
 
@@ -492,7 +492,7 @@ class PostPageController(
                     composer.layoutParams = lp(10)
                     composer
                 }
-                4 -> UiUtil.text(ctx, 14f, UiUtil.SUB).apply {
+                4 -> UiUtil.text(ctx, 14f, UiUtil.sub(ctx)).apply {
                     gravity = Gravity.CENTER
                     setPadding(dp(ctx, 12), dp(ctx, 16), dp(ctx, 12), dp(ctx, 16))
                     layoutParams = lp(0)
@@ -562,10 +562,10 @@ class PostPageController(
     private fun commentView(row: Row.Cmt): View {
         val c = row.c
         val ctx = activity
-        val shade = 246 - minOf(row.depth, 3) * 10
+        val shade = if (UiUtil.isNight(ctx)) 27 + minOf(row.depth, 3) * 6 else 246 - minOf(row.depth, 3) * 10
         val card = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiUtil.rect(Color.rgb(shade, shade + 1, shade + 3), UiUtil.BORDER, 2, 6, ctx)
+            background = UiUtil.rect(Color.rgb(shade, shade + 1, shade + 3), UiUtil.cardStroke(ctx), 2, 6, ctx)
         }
 
         // Шапка: аватар, имя, дата, «Удалить» (для своих).
@@ -608,7 +608,7 @@ class PostPageController(
         val covered = c.isSpoiler && c.id !in revealed
         if (covered) {
             card.addView(
-                UiUtil.text(ctx, 14f, UiUtil.SUB).apply {
+                UiUtil.text(ctx, 14f, UiUtil.sub(ctx)).apply {
                     text = "Спойлер. Нажмите, чтобы показать"; gravity = Gravity.CENTER
                     setPadding(dp(ctx, 12), dp(ctx, 18), dp(ctx, 12), dp(ctx, 18))
                     setOnClickListener { revealed.add(c.id); rebuildRows(null) }
@@ -616,7 +616,7 @@ class PostPageController(
             )
         } else {
             if (c.content.isNotBlank()) {
-                card.addView(UiUtil.text(ctx, 15f, UiUtil.TEXT).apply {
+                card.addView(UiUtil.text(ctx, 15f, UiUtil.ink(ctx)).apply {
                     text = c.content.replace("\r\n", "\n")
                     setPadding(dp(ctx, 10), dp(ctx, 8), dp(ctx, 10), dp(ctx, 4))
                     android.text.util.Linkify.addLinks(this, android.text.util.Linkify.WEB_URLS)
@@ -658,12 +658,12 @@ class PostPageController(
         }
         foot.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
         val like = TextView(ctx).apply {
-            text = "Да"; textSize = 14f; setTextColor(UiUtil.TEXT); gravity = Gravity.CENTER
+            text = "Да"; textSize = 14f; setTextColor(UiUtil.ink(ctx)); gravity = Gravity.CENTER
             setPadding(dp(ctx, 14), dp(ctx, 6), dp(ctx, 14), dp(ctx, 6))
         }
-        val counter = UiUtil.text(ctx, 14f, UiUtil.TEXT, bold = true).apply {
+        val counter = UiUtil.text(ctx, 14f, UiUtil.ink(ctx), bold = true).apply {
             text = c.likeCount.toString(); gravity = Gravity.CENTER
-            background = UiUtil.rect(Color.WHITE, UiUtil.BORDER, 2, 8, ctx)
+            background = UiUtil.rect(UiUtil.cardBg(ctx), UiUtil.cardStroke(ctx), 2, 8, ctx)
             setPadding(dp(ctx, 12), dp(ctx, 6), dp(ctx, 12), dp(ctx, 6))
         }
         paintLike(like, c.likedByMe)
