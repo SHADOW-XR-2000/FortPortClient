@@ -1,6 +1,12 @@
 package ru.fortport.client
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
+import java.io.File
 import android.util.Log
 import okhttp3.MultipartBody
 import okio.Buffer
@@ -36,6 +42,67 @@ class DemoBackend(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences("demo_db", Context.MODE_PRIVATE)
     private var db: JSONObject = load()
+    private val mediaDir = File(context.applicationContext.filesDir, "demo_media").apply { mkdirs() }
+
+    init { ensureMedia() }
+
+    // ------------------------------------------------------------------ медиатека (фото/GIF/видео/аудио)
+
+    /** Вид файла по mime: (ключ списка в медиатеке, тип во вложении поста). */
+    private fun kindOf(mime: String, name: String): Pair<String, String> {
+        val n = name.lowercase(Locale.ROOT)
+        return when {
+            mime.equals("image/gif", true) || n.endsWith(".gif") -> "gifs" to "gif"
+            mime.startsWith("image/") -> "photos" to "image"
+            mime.startsWith("video/") -> "videos" to "video"
+            mime.startsWith("audio/") -> "audios" to "audio"
+            n.endsWith(".mp4") || n.endsWith(".webm") || n.endsWith(".mkv") -> "videos" to "video"
+            n.endsWith(".mp3") || n.endsWith(".ogg") || n.endsWith(".wav") || n.endsWith(".m4a") -> "audios" to "audio"
+            else -> "photos" to "image"
+        }
+    }
+
+    private fun mediaList(): JSONArray = db.optJSONArray("media") ?: JSONArray().also { db.put("media", it) }
+
+    /** Сохраняет файл в память приложения и заносит его в медиатеку «аккаунта». */
+    private fun addMedia(bytes: ByteArray, name: String, mime: String, artist: String = ""): JSONObject {
+        val (kind, type) = kindOf(mime, name)
+        val id = nextId()
+        val ext = name.substringAfterLast('.', "").takeIf { it.length in 1..5 } ?: "bin"
+        val f = File(mediaDir, "$id.$ext")
+        f.writeBytes(bytes)
+        val item = obj(
+            "id" to id, "kind" to kind, "type" to type, "file_path" to "file://" + f.absolutePath,
+            "name" to name, "artist_name" to artist, "user_id" to ME
+        )
+        mediaList().put(item)
+        return item
+    }
+
+    private fun findMedia(id: Long): JSONObject? =
+        mediaList().let { a -> (0 until a.length()).map { a.getJSONObject(it) }.firstOrNull { it.optLong("id") == id } }
+
+    /** Первый запуск: несколько сгенерированных картинок, чтобы библиотеку было что открывать. */
+    private fun ensureMedia() {
+        if (db.has("media")) return
+        db.put("media", JSONArray())
+        val palette = listOf(
+            0xFF3D7BFF to 0xFF00E5FF, 0xFFFF7A59 to 0xFFFFD166, 0xFF7B2FF7 to 0xFFF107A3,
+            0xFF11998E to 0xFF38EF7D, 0xFFFC466B to 0xFF3F5EFB, 0xFF232526 to 0xFF9AA5B1
+        )
+        palette.forEachIndexed { i, (a, b) ->
+            try {
+                val bmp = Bitmap.createBitmap(480, 480, Bitmap.Config.ARGB_8888)
+                val c = Canvas(bmp)
+                c.drawRect(0f, 0f, 480f, 480f, Paint().apply { shader = LinearGradient(0f, 0f, 480f, 480f, a.toInt(), b.toInt(), Shader.TileMode.CLAMP) })
+                c.drawText("", 0f, 0f, Paint())
+                val out = java.io.ByteArrayOutputStream()
+                bmp.compress(Bitmap.CompressFormat.PNG, 90, out)
+                addMedia(out.toByteArray(), "Пример ${i + 1}.png", "image/png")
+            } catch (e: Exception) { Log.w(TAG, "sample media", e) }
+        }
+        persist()
+    }
 
     // ------------------------------------------------------------------ хранилище
 
@@ -45,7 +112,7 @@ class DemoBackend(context: Context) {
 
     private fun persist(o: JSONObject = db) { prefs.edit().putString(KEY, o.toString()).apply() }
 
-    @Synchronized fun reset() { db = seed(); persist() }
+    @Synchronized fun reset() { mediaDir.listFiles()?.forEach { it.delete() }; db = seed(); persist(); ensureMedia() }
 
     private fun obj(vararg p: Pair<String, Any?>) = JSONObject().also { o -> p.forEach { (k, v) -> o.put(k, v) } }
     private fun arr(vararg v: Any?) = JSONArray().also { a -> v.forEach { a.put(it) } }
@@ -260,7 +327,13 @@ class DemoBackend(context: Context) {
         if (p == "/api/users/chats/unread") return ok(obj("unreadCount" to 0))
         if (p == "/api/users/chats/wait") return ok(obj())
         m("/api/users/chats/(\\d+)")?.let { return ok(obj("favouriteChats" to JSONArray(), "userChats" to JSONArray())) }
-        if (p == "/api/users/audios") return ok(obj("audios" to JSONArray()))
+        m("/api/users/(photos|gifs|videos|audios)")?.let { g ->
+            val kind = g[1]
+            val out = JSONArray()
+            mediaList().let { a -> (0 until a.length()).map { a.getJSONObject(it) } }
+                .filter { it.optString("kind") == kind }.reversed().forEach { out.put(it) }
+            return ok(obj(kind to out))
+        }
 
         // --- пользователи
         if (p == "/api/users" && method == "GET") return ok(JSONArray().also { a -> (0 until users().length()).forEach { a.put(users().getJSONObject(it)) } })
@@ -440,18 +513,30 @@ class DemoBackend(context: Context) {
         val p = path.substringBefore('?')
         val res = when {
             p == "/api/posts" -> {
+                val attached = attachments(body, f, "files", "existingFiles")
                 val id = nextId()
                 val post = post(id, ME, f["community"]?.toLongOrNull(), f["content"].orEmpty(), 0,
                     "isAnonymous" to (f["isAnonymous"] == "true"), "spoiler" to (f["isSpoiler"] == "1"),
                     "spoilerPreview" to f["spoilerPreview"].orEmpty(), "nsfw" to (f["isNsfw"] == "1"))
                 post.put("createdMs", System.currentTimeMillis())
                 f["poll"]?.let { raw -> pollFrom(raw)?.let { post.put("poll", it) } }
+                if (attached.isNotEmpty()) {
+                    post.put("files", JSONArray().also { a -> attached.forEach { a.put(it.optString("file_path")) } })
+                    post.put("fileTypes", JSONArray().also { a -> attached.forEach { a.put(it.optString("type")) } })
+                    post.put("fileIds", JSONArray().also { a -> attached.forEach { a.put(it.optLong("id")) } })
+                    post.put("fileNames", JSONArray().also { a -> attached.forEach { a.put(it.optString("name")) } })
+                }
                 db.getJSONArray("posts").put(post)
                 ok(obj("success" to true, "id" to id))
             }
             Regex("/api/posts/(\\d+)/comments").matches(p) -> {
                 val post = findPost(Regex("/api/posts/(\\d+)/comments").matchEntire(p)!!.groupValues[1].toLong()) ?: return fail(404, "Пост не найден")
+                val att = attachments(body, f, "attachment", "existingAttachment").firstOrNull()
                 val c = comment(nextId(), ME, f["content"].orEmpty(), 0, f["refId"]?.toLongOrNull())
+                if (att != null) {
+                    c.put("attachment", att.optString("file_path"))
+                    c.put("attachmentType", if (att.optString("type") == "gif") "image" else att.optString("type"))
+                }
                 c.put("createdMs", System.currentTimeMillis())
                 post.getJSONArray("comments").put(c)
                 ok(obj("success" to true, "id" to c.optLong("id")))
@@ -463,6 +548,32 @@ class DemoBackend(context: Context) {
     } catch (e: Exception) {
         Log.w(TAG, "multipart $path", e); fail(500, "Тестовый режим: ошибка обработки запроса")
     }
+    }
+
+    /**
+     * Вложения запроса: загруженные файлы (поле [fileField]) сохраняются и попадают в медиатеку,
+     * файлы из медиатеки приходят в [existingField] как {path:"/photo/ID", type} (или массив таких).
+     */
+    private fun attachments(b: MultipartBody, f: Map<String, String>, fileField: String, existingField: String): List<JSONObject> {
+        val out = ArrayList<JSONObject>()
+        for (part in b.parts) {
+            val cd = part.headers?.get("Content-Disposition").orEmpty()
+            val name = Regex("name=\"([^\"]*)\"").find(cd)?.groupValues?.get(1) ?: continue
+            val fileName = Regex("filename=\"([^\"]*)\"").find(cd)?.groupValues?.get(1) ?: continue
+            if (name != fileField) continue
+            val bytes = Buffer().also { part.body.writeTo(it) }.readByteArray()
+            out.add(addMedia(bytes, fileName.ifBlank { "file" }, part.body.contentType()?.toString().orEmpty().substringBefore(';')))
+        }
+        f[existingField]?.let { raw ->
+            try {
+                val arr = if (raw.trimStart().startsWith("[")) JSONArray(raw) else JSONArray().put(JSONObject(raw))
+                for (i in 0 until arr.length()) {
+                    val id = Regex("(\\d+)$").find(arr.optJSONObject(i)?.optString("path").orEmpty())?.groupValues?.get(1)?.toLongOrNull() ?: continue
+                    findMedia(id)?.let { out.add(it) }
+                }
+            } catch (e: Exception) { Log.w(TAG, "existing media", e) }
+        }
+        return out
     }
 
     private fun pollFrom(raw: String): JSONObject? = try {

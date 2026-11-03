@@ -152,7 +152,7 @@ class SiteApi(private val activity: AppCompatActivity) {
     }
 
     fun absUrl(path: String): String = when {
-        path.startsWith("http") -> path
+        path.startsWith("http") || path.startsWith("file:") -> path
         path.startsWith("/") -> ORIGIN + path
         else -> "$ORIGIN/$path"
     }
@@ -213,7 +213,10 @@ class SiteApi(private val activity: AppCompatActivity) {
         iv.setImageDrawable(null)
         imgPool.execute {
             val bmp = try {
-                client.newCall(Request.Builder().url(url).get().build()).execute().use { r ->
+                if (url.startsWith("file:")) {
+                    // Файл тестового режима (медиатека виртуального аккаунта).
+                    java.io.File(java.net.URI(url)).takeIf { it.exists() }?.readBytes()?.let { decodeSampled(it, maxSide) }
+                } else client.newCall(Request.Builder().url(url).get().build()).execute().use { r ->
                     if (!r.isSuccessful) null else r.body?.bytes()?.let { decodeSampled(it, maxSide) }
                 }
             } catch (e: Exception) { null }

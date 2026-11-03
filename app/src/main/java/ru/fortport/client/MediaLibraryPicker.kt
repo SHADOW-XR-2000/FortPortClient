@@ -4,6 +4,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.view.Gravity
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -164,58 +165,124 @@ object MediaLibraryPicker {
 
     private fun showItems(host: PostHost, kind: Kind, items: List<LibItem>, onPicked: (Attachment) -> Unit) {
         val ctx = host.activity
-        val box: View
+        val night = UiUtil.isNight(ctx)
+        val ink = if (night) Color.WHITE else Color.BLACK
+        val subInk = if (night) 0xFFBDBDBD.toInt() else 0xFF555555.toInt()
+        val soft = if (night) 0xFF2A2F40.toInt() else 0xFFF2F4F8.toInt()
+        val blue = 0xFF2F7CF6.toInt()
         var dialog: AlertDialog? = null
+        val isGif = kind.label == "GIF"
         val choose = { item: LibItem ->
             val label = when (kind.type) {
                 "audio" -> item.name.ifBlank { "Аудио" }
                 "video" -> "Видео #${item.id}"
-                else -> if (kind.label == "GIF") "GIF #${item.id}" else "Фото #${item.id}"
+                else -> if (isGif) "GIF #${item.id}" else "Фото #${item.id}"
             }
-            onPicked(Attachment(null, label, kind.type, libPath = kind.pathPrefix + item.id, libType = kind.type, isGif = kind.label == "GIF"))
+            onPicked(Attachment(null, label, kind.type, libPath = kind.pathPrefix + item.id, libType = kind.type, isGif = isGif))
             dialog?.dismiss()
         }
+        val pressedBg = { UiUtil.rect(blue, 0, 0, 10, ctx) }
+        fun selectable(base: Int) = android.graphics.drawable.StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), pressedBg())
+            addState(intArrayOf(), UiUtil.rect(base, 0, 0, 10, ctx))
+        }
+        fun textColors(normal: Int) = android.content.res.ColorStateList(
+            arrayOf(intArrayOf(android.R.attr.state_pressed), intArrayOf()), intArrayOf(Color.WHITE, normal)
+        )
+
+        val root = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            background = UiUtil.rect(if (night) 0xFF1B1D26.toInt() else Color.WHITE, if (night) 0xFFF2F2F2.toInt() else Color.BLACK, 3, 14, ctx)
+            setPadding(dp(ctx, 10), dp(ctx, 14), dp(ctx, 10), dp(ctx, 14))
+        }
+        root.addView(UiUtil.text(ctx, 22f, ink).apply { text = kind.label; gravity = Gravity.CENTER },
+            UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP).apply { bottomMargin = dp(ctx, 8) })
+
+        val content: View
         if (kind.type == "audio") {
-            val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(ctx, 8), dp(ctx, 8), dp(ctx, 8), dp(ctx, 8)) }
-            items.forEachIndexed { i, item ->
+            val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            items.forEach { item ->
                 val row = LinearLayout(ctx).apply {
-                    orientation = LinearLayout.VERTICAL
-                    background = UiUtil.rect(0xFFF2FAFF.toInt(), 0xFF8FDADB.toInt(), 1, 8, ctx)
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    background = selectable(soft)
+                    isClickable = true; isFocusable = true
                     setPadding(dp(ctx, 10), dp(ctx, 8), dp(ctx, 10), dp(ctx, 8))
                     setOnClickListener { choose(item) }
                 }
-                row.addView(UiUtil.text(ctx, 15f, UiUtil.TEXT, bold = true, maxLines = 1).apply { text = "${i + 1}. " + item.name.ifBlank { "Без названия" } })
-                row.addView(UiUtil.text(ctx, 13f, UiUtil.SUB, maxLines = 1).apply { text = item.artist.ifBlank { "Неизвестно" } })
-                col.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(ctx, 6) })
+                row.addView(ImageView(ctx).apply {
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    icon(ctx, "mylib_audio.png")?.let { setImageBitmap(it) }
+                }, UiUtil.lp(dp(ctx, 44), dp(ctx, 44)))
+                val txt = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+                txt.addView(TextView(ctx).apply {
+                    text = item.name.ifBlank { "Без названия" }; textSize = 15f; maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END; setTypeface(null, android.graphics.Typeface.BOLD)
+                    setTextColor(textColors(ink)); isDuplicateParentStateEnabled = true
+                })
+                txt.addView(TextView(ctx).apply {
+                    text = item.artist.ifBlank { "Неизвестно" }; textSize = 13f; maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    setTextColor(textColors(subInk)); isDuplicateParentStateEnabled = true
+                })
+                row.addView(txt, UiUtil.lp(0, UiUtil.WRAP, 1f).apply { marginStart = dp(ctx, 10) })
+                col.addView(row, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP).apply { bottomMargin = dp(ctx, 6) })
             }
-            box = ScrollView(ctx).apply { addView(col) }
+            content = col
         } else {
-            val grid = GridLayout(ctx).apply { columnCount = 3; setPadding(dp(ctx, 6), dp(ctx, 6), dp(ctx, 6), dp(ctx, 6)) }
-            val size = (ctx.resources.displayMetrics.widthPixels - dp(ctx, 12 + 3 * 8 + 32)) / 3
-            items.forEach { item ->
-                val cell: View = if (kind.type == "video") {
-                    TextView(ctx).apply {
-                        text = "▶"; textSize = 28f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
-                        setBackgroundColor(0xFF0B0F1A.toInt())
-                    }
-                } else {
-                    ImageView(ctx).apply {
-                        scaleType = ImageView.ScaleType.CENTER_CROP
-                        setBackgroundColor(0xFFE0E4EC.toInt())
-                        host.api.loadImage(this, item.filePath, 256)
-                    }
-                }
-                cell.setOnClickListener { choose(item) }
-                val lp = GridLayout.LayoutParams().apply {
-                    width = size; height = size
-                    setMargins(dp(ctx, 4), dp(ctx, 4), dp(ctx, 4), dp(ctx, 4))
-                }
-                grid.addView(cell, lp)
+            val placeholder = when {
+                kind.type == "video" -> "mylib_video.png"
+                isGif -> "mylib_gif.png"
+                else -> "mylib_pic.png"
             }
-            box = ScrollView(ctx).apply { addView(grid) }
+            val grid = GridLayout(ctx).apply { columnCount = 3 }
+            val gap = dp(ctx, 4)
+            val size = ((ctx.resources.displayMetrics.widthPixels * 0.92f).toInt() - dp(ctx, 20 + 6) - 6 * gap) / 3
+            items.forEach { item ->
+                val cell = FrameLayout(ctx).apply {
+                    background = selectable(soft)
+                    isClickable = true; isFocusable = true
+                    setOnClickListener { choose(item) }
+                }
+                // Значок виден, пока миниатюра не подгрузилась (или если её нет).
+                cell.addView(ImageView(ctx).apply {
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    icon(ctx, placeholder)?.let { setImageBitmap(it) }
+                    setPadding(dp(ctx, 14), dp(ctx, 14), dp(ctx, 14), dp(ctx, 14))
+                }, FrameLayout.LayoutParams(-1, -1))
+                val thumb = ImageView(ctx).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    visibility = View.GONE
+                }
+                cell.addView(thumb, FrameLayout.LayoutParams(-1, -1))
+                host.api.loadImage(thumb, item.filePath, 256) { okLoaded -> thumb.visibility = if (okLoaded) View.VISIBLE else View.GONE }
+                grid.addView(cell, GridLayout.LayoutParams().apply {
+                    width = size; height = size
+                    setMargins(gap, gap, gap, gap)
+                })
+            }
+            content = grid
         }
-        dialog = AlertDialog.Builder(ctx).setTitle(kind.label).setView(box)
-            .setNegativeButton("Отмена", null).create()
-        dialog.show()
+        val maxH = (ctx.resources.displayMetrics.heightPixels * 0.6f).toInt()
+        val scroll = object : ScrollView(ctx) {
+            override fun onMeasure(w: Int, h: Int) {
+                super.onMeasure(w, View.MeasureSpec.makeMeasureSpec(maxH, View.MeasureSpec.AT_MOST))
+            }
+        }.apply { addView(content) }
+        root.addView(scroll, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP))
+
+        val close = AeroButton.style(TextView(ctx).apply {
+            text = "Закрыть"; textSize = 16f; gravity = Gravity.CENTER
+            setPadding(dp(ctx, 12), dp(ctx, 10), dp(ctx, 12), dp(ctx, 10))
+            setOnClickListener { dialog?.dismiss() }
+        })
+        root.addView(close, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP).apply {
+            topMargin = dp(ctx, 12); marginStart = dp(ctx, 24); marginEnd = dp(ctx, 24)
+        })
+
+        val dlg = AlertDialog.Builder(ctx).setView(root).create()
+        dialog = dlg
+        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dlg.show()
     }
 }
