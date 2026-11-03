@@ -34,17 +34,97 @@ object MediaLibraryPicker {
         Kind("Аудио", "audios", "audios", "/audio/", "audio")
     )
 
+    private class Cell(val label: String, val icon: String)
+
+    private val CELLS = listOf(
+        Cell("Фото с библиотеки", "pub_pic_gif.png"),
+        Cell("GIF с библиотеки", "pub_pic_gif.png"),
+        Cell("Видео с библиотеки", "pub_video.png"),
+        Cell("Аудио с библиотеки", "pub_audio.png"),
+        Cell("Загрузить с устройства", "pub_load.png"),
+        Cell("Добавить опрос", "pub_opros.png")
+    )
+
+    private fun icon(ctx: android.content.Context, name: String) =
+        try { ctx.assets.open("ui/icons/$name").use { android.graphics.BitmapFactory.decodeStream(it) } } catch (e: Exception) { null }
+
+    /**
+     * Окно «Добавить медиа»: шесть плиток (фото, GIF, видео, аудио из библиотеки; файл с устройства; опрос)
+     * и Aero-кнопка «Закрыть». Плитка при нажатии подсвечивается синим, текст белеет.
+     * [onPoll] == null — режим комментариев: «Добавить опрос» неактивна.
+     */
     fun show(host: PostHost, pickFromDevice: (done: (Uri) -> Unit) -> Unit, onPicked: (Attachment) -> Unit,
-             describeUri: (Uri) -> Attachment) {
-        val labels = (KINDS.map { it.label + " из медиатеки" } + "Файл с устройства").toTypedArray()
-        AlertDialog.Builder(host.activity)
-            .setTitle("Прикрепить")
-            .setItems(labels) { _, which ->
-                if (which == KINDS.size) pickFromDevice { onPicked(describeUri(it)) }
-                else loadAndShow(host, KINDS[which], onPicked)
+             describeUri: (Uri) -> Attachment, onPoll: (() -> Unit)? = null) {
+        val ctx = host.activity
+        val night = UiUtil.isNight(ctx)
+        val ink = if (night) Color.WHITE else Color.BLACK
+        var dialog: AlertDialog? = null
+
+        val root = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            background = UiUtil.rect(if (night) 0xFF1B1D26.toInt() else Color.WHITE, if (night) 0xFFF2F2F2.toInt() else Color.BLACK, 3, 14, ctx)
+            setPadding(dp(ctx, 12), dp(ctx, 16), dp(ctx, 12), dp(ctx, 16))
+        }
+        root.addView(UiUtil.text(ctx, 24f, ink).apply { text = "Добавить медиа"; gravity = Gravity.CENTER },
+            UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP).apply { bottomMargin = dp(ctx, 8) })
+
+        fun cell(i: Int): View {
+            val c = CELLS[i]
+            val enabled = !(i == 5 && onPoll == null)
+            val textColors = android.content.res.ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_pressed), intArrayOf()), intArrayOf(Color.WHITE, ink)
+            )
+            return LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(dp(ctx, 6), dp(ctx, 8), dp(ctx, 6), dp(ctx, 8))
+                background = android.graphics.drawable.StateListDrawable().apply {
+                    addState(intArrayOf(android.R.attr.state_pressed), UiUtil.rect(0xFF2F7CF6.toInt(), 0, 0, 10, ctx))
+                    addState(intArrayOf(), UiUtil.rect(0, 0, 0, 10, ctx))
+                }
+                isClickable = enabled; isFocusable = enabled
+                alpha = if (enabled) 1f else 0.35f
+                addView(ImageView(ctx).apply {
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    icon(ctx, c.icon)?.let { setImageBitmap(it) }
+                }, UiUtil.lp(dp(ctx, 76), dp(ctx, 76)))
+                addView(TextView(ctx).apply {
+                    text = c.label; textSize = 14f; gravity = Gravity.CENTER; setTextColor(textColors)
+                }, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP).apply { topMargin = dp(ctx, 4) })
+                if (enabled) setOnClickListener {
+                    dialog?.dismiss()
+                    when (i) {
+                        in 0..3 -> loadAndShow(host, KINDS[i], onPicked)
+                        4 -> pickFromDevice { onPicked(describeUri(it)) }
+                        else -> onPoll?.invoke()
+                    }
+                }
+                // Текст плитки становится белым и у вложенного TextView, пока плитка нажата.
+                (getChildAt(1) as TextView).duplicateParentState = true
             }
-            .setNegativeButton("Отмена", null)
-            .show()
+        }
+
+        val grid = GridLayout(ctx).apply { columnCount = 2 }
+        for (i in CELLS.indices) {
+            grid.addView(cell(i), GridLayout.LayoutParams(
+                GridLayout.spec(GridLayout.UNDEFINED, 1f), GridLayout.spec(GridLayout.UNDEFINED, 1f)
+            ).apply { width = 0; setMargins(dp(ctx, 4), dp(ctx, 4), dp(ctx, 4), dp(ctx, 4)) })
+        }
+        root.addView(grid, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP))
+
+        val close = AeroButton.style(TextView(ctx).apply {
+            text = "Закрыть"; textSize = 16f; gravity = Gravity.CENTER
+            setPadding(dp(ctx, 12), dp(ctx, 10), dp(ctx, 12), dp(ctx, 10))
+            setOnClickListener { dialog?.dismiss() }
+        })
+        root.addView(close, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP).apply {
+            topMargin = dp(ctx, 12); marginStart = dp(ctx, 24); marginEnd = dp(ctx, 24)
+        })
+
+        val dlg = AlertDialog.Builder(ctx).setView(ScrollView(ctx).apply { addView(root) }).create()
+        dialog = dlg
+        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dlg.show()
     }
 
     private fun loadAndShow(host: PostHost, kind: Kind, onPicked: (Attachment) -> Unit) {
