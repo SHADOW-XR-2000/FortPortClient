@@ -379,7 +379,7 @@ class PostPageController(
 
     /** «+» в поле ввода: медиатека сайта (фото, GIF, видео, аудио) или файл с устройства. */
     private fun pickAttachment(done: (Attachment) -> Unit) {
-        MediaLibraryPicker.show(this, pickFile, done) { describe(it) }
+        MediaLibraryPicker.show(this, pickFile, done, { describe(it) }, null) // в комментариях опрос недоступен
     }
 
     private fun sendComment(text: String, att: Attachment?, refId: Long?, done: (Boolean) -> Unit) {

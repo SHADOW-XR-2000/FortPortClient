@@ -209,17 +209,12 @@ object PostComposer {
         val btnAdd = Button(act).apply {
             text = "Добавить"
             setOnClickListener {
-                MediaLibraryPicker.show(host, pickFile, { a -> tryAdd(a) }) { uri -> describe(uri) }
-            }
-        }
-        val btnPoll = Button(act).apply {
-            text = "Опрос"
-            setOnClickListener {
-                showPollDialog(act, pollTitle.ifBlank { null }) { t, json -> pollTitle = t; poll = json; redrawFiles() }
+                MediaLibraryPicker.show(host, pickFile, { a -> tryAdd(a) }, { uri -> describe(uri) }) {
+                    showPollDialog(act, pollTitle.ifBlank { null }) { t, json -> pollTitle = t; poll = json; redrawFiles() }
+                }
             }
         }
         btnRow.addView(btnAdd, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        btnRow.addView(btnPoll, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         box.addView(btnRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             .apply { topMargin = dp(act, 8) })
 
