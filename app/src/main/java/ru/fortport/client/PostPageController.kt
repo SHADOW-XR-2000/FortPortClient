@@ -84,8 +84,8 @@ class ComposerView(
         val row = LinearLayout(context).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val attach = pill("+")
         sendBtn.apply {
-            text = "➤"; textSize = 18f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
-            background = UiUtil.rect(0x3300E5FF, 0xFF8FF7FF.toInt(), 2, 10, context)
+            text = "➤"; textSize = 18f; gravity = Gravity.CENTER
+            AeroButton.style(this)
         }
         row.addView(attach, UiUtil.lp(dp(context, 56), dp(context, 34)))
         row.addView(View(context), UiUtil.lp(0, 1, 1f))
@@ -97,8 +97,8 @@ class ComposerView(
     }
 
     private fun pill(t: String) = TextView(context).apply {
-        text = t; textSize = 20f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
-        background = UiUtil.rect(0x3300E5FF, 0xFF8FF7FF.toInt(), 2, 10, context)
+        text = t; textSize = 20f; gravity = Gravity.CENTER
+        AeroButton.style(this)
     }
 
     private fun setAttachment(a: Attachment) {

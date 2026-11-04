@@ -162,7 +162,7 @@ class PhotoViewerActivity : AppCompatActivity() {
                 val type = o.optString("type", "image")
                 val url = o.optString("url", "")
                 // Видео в просмотрщике не показываем — оно играет в самом посте.
-                if (type == "video" || !url.startsWith("https://")) continue
+                if (type == "video" || !(url.startsWith("https://") || url.startsWith("file:"))) continue
                 if (i == selected) newIndex = list.size
                 list.add(Item(url, type, o.optLong("mediaId", 0L).takeIf { it > 0L }))
             }
@@ -470,6 +470,8 @@ class PhotoViewerActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ сеть
 
     private fun httpGet(url: String): ByteArray {
+        // Файл тестового режима лежит в памяти приложения.
+        if (url.startsWith("file:")) return java.io.File(java.net.URI(url)).readBytes()
         val (code, body) = httpRequest(url, "GET", null, 0)
         if (code !in 200..299) throw IOException("HTTP $code для $url")
         return body
