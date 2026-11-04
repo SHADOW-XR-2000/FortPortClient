@@ -198,8 +198,8 @@ class PostCardView(context: Context) : LinearLayout(context) {
         }
         awardsHolder.addView(scroll, UiUtil.lp(0, UiUtil.WRAP, 1f))
         val give = TextView(ctx).apply {
-            text = "Наградить"; textSize = 13f; setTextColor(0xFFE67E22.toInt()); gravity = Gravity.CENTER
-            background = UiUtil.rect(UiUtil.cardBg(ctx), 0xFFE67E22.toInt(), 2, 10, ctx)
+            text = "Наградить"; textSize = 13f; gravity = Gravity.CENTER
+            AeroButton.style(this)
             setPadding(dp(ctx, 10), dp(ctx, 5), dp(ctx, 10), dp(ctx, 5))
         }
         give.setOnClickListener {

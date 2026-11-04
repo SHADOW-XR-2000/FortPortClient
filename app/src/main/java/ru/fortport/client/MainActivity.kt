@@ -404,6 +404,10 @@ class MainActivity : AppCompatActivity() {
         )
         findViewById<View>(R.id.postBackButton).setOnClickListener { onBackPressed() }
         findViewById<View>(R.id.settingsBackButton).setOnClickListener { onBackPressed() }
+        listOf(R.id.postBackButton, R.id.settingsBackButton).forEach { id ->
+            findViewById<TextView>(id)?.let { AeroButton.style(it) }
+        }
+        installBarAutoHide(findViewById(R.id.rootLayout))
         try {
             assets.open("ui/icons/setting_icon.png").use { findViewById<ImageView>(R.id.settingsTopIcon).setImageBitmap(BitmapFactory.decodeStream(it)) }
         } catch (e: Exception) { /* иконку положат в assets/ui/icons позже */ }
@@ -942,6 +946,8 @@ class MainActivity : AppCompatActivity() {
 
     /** Показывает либо обычную верхнюю панель, либо шапку раздела, либо ничего. */
     private fun applyTopChrome(barsVisible: Boolean) {
+        // Смена экрана возвращает спрятанную при прокрутке нижнюю панель.
+        bottomNavBar.animate().cancel(); bottomNavBar.translationY = 0f
         val section = if (barsVisible) activeSectionChrome() else null
         val inPost = barsVisible && nativeSection == NativeSection.POST
         val inSettings = barsVisible && nativeSection == NativeSection.SETTINGS
@@ -1926,6 +1932,23 @@ class MainActivity : AppCompatActivity() {
         val hasSectionChrome = activeSectionChrome() != null
         navHomeCenter.visibility = if (hasSectionChrome) View.VISIBLE else View.GONE
         if (paymentWebView == null) applyTopChrome(barsShouldShow())
+    }
+
+    /**
+     * Нижняя панель прячется при листании вниз и возвращается при листании вверх (любой скоростью):
+     * слушатель вешается на все списки нативных разделов.
+     */
+    private fun installBarAutoHide(v: View) {
+        if (v is androidx.recyclerview.widget.RecyclerView) {
+            v.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+                override fun onScrolled(rv: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+                    if (bottomNavBar.visibility != View.VISIBLE) return
+                    if (dy > 2) hideBottomNav() else if (dy < -2) showBottomNav()
+                }
+            })
+        } else if (v is ViewGroup) {
+            for (i in 0 until v.childCount) installBarAutoHide(v.getChildAt(i))
+        }
     }
 
     private fun hideBottomNav() {

@@ -253,7 +253,7 @@ class DemoBackend(context: Context) {
         o.put("username", u?.optString("username") ?: "Удалён")
         o.put("isOwner", false); o.put("isDeveloper", u?.optBoolean("isDeveloper") ?: false); o.put("isModerator", false)
         o.put("displayRole", u?.opt("displayRole"))
-        o.put("files", JSONArray()); o.put("fileTypes", JSONArray()); o.put("fileIds", JSONArray()); o.put("fileNames", JSONArray())
+        if (!p.has("files")) { o.put("files", JSONArray()); o.put("fileTypes", JSONArray()); o.put("fileIds", JSONArray()); o.put("fileNames", JSONArray()) }
         o.put("createdAt", iso(p.optLong("createdMs")))
         o.put("likeCount", p.getJSONArray("likes").length()); o.put("dislikeCount", p.getJSONArray("dislikes").length())
         val cs = JSONArray(); val src = p.getJSONArray("comments")
