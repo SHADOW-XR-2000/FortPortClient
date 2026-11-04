@@ -55,46 +55,40 @@ object PostComposer {
 
         val box = LinearLayout(act).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(act, 16), dp(act, 8), dp(act, 16), dp(act, 8))
+            setPadding(dp(act, 4), dp(act, 4), dp(act, 4), dp(act, 4))
         }
         val scroll = ScrollView(act).apply { addView(box) }
+        val lblInk = AeroUi.labelColor(act)
 
-        // Куда публикуем.
-        val target = TextView(act).apply {
-            textSize = 15f
-            setTextColor(UiUtil.TEXT)
-            setPadding(0, dp(act, 6), 0, dp(act, 10))
-        }
-        fun refreshTarget() {
-            target.text = if (allowChoice) "Новый пост в: $communityName ▾" else ""
-            target.visibility = if (allowChoice) View.VISIBLE else View.GONE
-        }
-        refreshTarget()
+        // Куда публикуем (Aero DropDown; на своей странице и в порте элемент скрыт).
         if (allowChoice) {
             repo.pool.execute {
                 val list = repo.loadMyPorts()
                 act.runOnUiThread { ports = list }
             }
-            target.setOnClickListener {
-                val names = (listOf("Свой профиль") + ports.map { p -> p.second }).toTypedArray()
-                AlertDialog.Builder(act)
-                    .setTitle("Новый пост в:")
-                    .setItems(names) { _, which ->
-                        if (which == 0) { community = null; communityName = "Свой профиль" }
-                        else { community = ports[which - 1].first; communityName = ports[which - 1].second }
-                        refreshTarget()
-                    }
-                    .setNegativeButton("Закрыть", null)
-                    .show()
-            }
+            val row = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+            row.addView(TextView(act).apply { text = "Выложить в:"; textSize = 15f; setTextColor(lblInk) })
+            lateinit var dd: TextView
+            dd = AeroUi.dropdown(
+                act,
+                items = { listOf("Мой профиль") + ports.map { p -> p.second } },
+                selected = { if (community == null) 0 else ports.indexOfFirst { it.first == community } + 1 },
+                onSelect = { which ->
+                    if (which == 0) { community = null; communityName = "Мой профиль" }
+                    else { community = ports[which - 1].first; communityName = ports[which - 1].second }
+                    dd.text = communityName
+                }
+            )
+            communityName = "Мой профиль"
+            dd.text = communityName
+            row.addView(AeroUi.dropdownView(dd), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(act, 10) })
+            box.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(act, 10) })
         }
-        box.addView(target)
 
-        fun check(label: String) = CheckBox(act).apply { text = label; textSize = 15f }
-        val cbTitle = check("Заголовок")
-        val cbAnon = check("Анонимно")
-        val cbSpoiler = check("Спойлер")
-        val cbNsfw = check("18+")
+        val cbTitle = AeroUi.checkBox(act, "Заголовок")
+        val cbAnon = AeroUi.checkBox(act, "Анонимно")
+        val cbSpoiler = AeroUi.checkBox(act, "Спойлер")
+        val cbNsfw = AeroUi.checkBox(act, "18+")
         val row1 = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL }
         row1.addView(cbTitle, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         row1.addView(cbAnon, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -104,32 +98,42 @@ object PostComposer {
         box.addView(row1)
         box.addView(row2)
 
-        val etSpoiler = EditText(act).apply {
-            hint = "Текст, предупреждающий о спойлере"
+        // Поля растягиваются вниз по мере ввода, пока не упрутся в ограничение по символам.
+        val etSpoiler = AeroUi.input(EditText(act).apply {
+            hint = "Текст спойлера"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             filters = arrayOf(InputFilter.LengthFilter(200))
+            gravity = android.view.Gravity.TOP
             visibility = View.GONE
-        }
-        val etTitle = EditText(act).apply {
-            hint = "Заголовок..."
+        })
+        val etTitle = AeroUi.input(EditText(act).apply {
+            hint = "Заголовок"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             filters = arrayOf(InputFilter.LengthFilter(100))
+            gravity = android.view.Gravity.TOP
             visibility = View.GONE
-        }
-        val etText = EditText(act).apply {
-            hint = "Умные мысли, и даже не очень..."
+        })
+        val etText = AeroUi.input(EditText(act).apply {
+            hint = "Текст поста"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             minLines = 5
             gravity = android.view.Gravity.TOP
-        }
+        })
         cbTitle.setOnCheckedChangeListener { _, on -> etTitle.visibility = if (on) View.VISIBLE else View.GONE }
         cbSpoiler.setOnCheckedChangeListener { _, on -> etSpoiler.visibility = if (on) View.VISIBLE else View.GONE }
-        box.addView(etTitle)
-        box.addView(etSpoiler)
+        box.addView(etTitle, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(act, 10) })
+        box.addView(etSpoiler, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(act, 8) })
         box.addView(etText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            .apply { topMargin = dp(act, 6) })
+            .apply { topMargin = dp(act, 8) })
 
         // Вложения и опрос.
-        val files = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL }
-        box.addView(files)
+        val files = LinearLayout(act).apply {
+            orientation = LinearLayout.VERTICAL
+            background = AeroUi.fieldBackground(act)
+            setPadding(dp(act, 8), dp(act, 4), dp(act, 8), dp(act, 8))
+            visibility = View.GONE
+        }
+        box.addView(files, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(act, 8) })
 
         fun kindOf(a: Attachment): String = when {
             a.libPath != null -> if (a.isGif) "gif" else (a.libType ?: "image")
@@ -144,10 +148,10 @@ object PostComposer {
         fun chip(label: String, onRemove: () -> Unit): View = LinearLayout(act).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
-            background = UiUtil.rect(0xFFEAF6FA.toInt(), UiUtil.BORDER, 1, 6, act)
+            background = UiUtil.rect(UiUtil.softBg(act), UiUtil.softStroke(act), 1, 6, act)
             setPadding(dp(act, 10), dp(act, 4), dp(act, 4), dp(act, 4))
             addView(
-                UiUtil.text(act, 14f, UiUtil.TEXT, maxLines = 1).apply { text = label },
+                UiUtil.text(act, 14f, UiUtil.ink(act), maxLines = 1).apply { text = label },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             )
             addView(TextView(act).apply {
@@ -173,6 +177,7 @@ object PostComposer {
                         .apply { topMargin = dp(act, 6) }
                 )
             }
+            files.visibility = if (files.childCount > 0) View.VISIBLE else View.GONE
         }
 
         fun describe(uri: Uri): Attachment {
@@ -206,27 +211,37 @@ object PostComposer {
         }
 
         val btnRow = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL }
-        val btnAdd = Button(act).apply {
-            text = "Добавить"
+        val btnAdd = AeroButton.style(TextView(act).apply {
+            text = "+ Медиа"; textSize = 16f; gravity = android.view.Gravity.CENTER
+            setPadding(dp(act, 8), dp(act, 11), dp(act, 8), dp(act, 11))
             setOnClickListener {
                 MediaLibraryPicker.show(host, pickFile, { a -> tryAdd(a) }, { uri -> describe(uri) }) {
                     showPollDialog(act, pollTitle.ifBlank { null }) { t, json -> pollTitle = t; poll = json; redrawFiles() }
                 }
             }
-        }
-        btnRow.addView(btnAdd, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        })
+        val send = AeroButton.style(TextView(act).apply {
+            text = "Публикация"; textSize = 16f; gravity = android.view.Gravity.CENTER
+            setPadding(dp(act, 8), dp(act, 11), dp(act, 8), dp(act, 11))
+        })
+        btnRow.addView(btnAdd, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(act, 6) })
+        btnRow.addView(send, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(act, 6) })
         box.addView(btnRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            .apply { topMargin = dp(act, 8) })
+            .apply { topMargin = dp(act, 12) })
 
-        val dialog = AlertDialog.Builder(act)
-            .setTitle("Новый пост")
-            .setView(scroll)
-            .setPositiveButton("Отправить", null)
-            .setNegativeButton("Отмена", null)
-            .create()
+        val root = LinearLayout(act).apply {
+            orientation = LinearLayout.VERTICAL
+            background = AeroUi.panelBackground(act)
+            setPadding(dp(act, 14), dp(act, 14), dp(act, 14), dp(act, 14))
+        }
+        root.addView(TextView(act).apply {
+            text = "Новый пост"; textSize = 22f; gravity = android.view.Gravity.CENTER; setTextColor(AeroUi.titleColor(act))
+        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(act, 10) })
+        root.addView(scroll, LinearLayout.LayoutParams(-1, -2))
+        val dialog = AlertDialog.Builder(act).setView(root).create()
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
         dialog.show()
 
-        val send = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
         send.setOnClickListener {
             if (sending) return@setOnClickListener
             val raw = etText.text.toString().trim()
@@ -265,7 +280,7 @@ object PostComposer {
                     if (act.isFinishing || act.isDestroyed) return@runOnUiThread
                     sending = false
                     send.isEnabled = true
-                    send.text = "Отправить"
+                    send.text = "Публикация"
                     when {
                         errMsg != null -> Toast.makeText(act, errMsg, Toast.LENGTH_LONG).show()
                         result == null -> {}
