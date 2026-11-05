@@ -727,22 +727,6 @@
 
         </FrameLayout>
 
-        <View
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
-        <!-- Кнопка в правом углу раскрывает меню пользователя (UserMenu). -->
-        <ImageButton
-            android:id="@+id/navHome"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/nav_icon_frame"
-            android:padding="4dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_nav_home"
-            android:contentDescription="@string/nav_profile" />
-
     </LinearLayout>
 
     <LinearLayout
@@ -884,6 +868,23 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <!-- Кнопка в левом углу нижней панели раскрывает меню пользователя (UserMenu). -->
+        <ImageButton
+            android:id="@+id/navMenu"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/nav_icon_frame"
+            android:padding="4dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_nav_home"
+            android:contentDescription="@string/nav_profile" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
         <ImageButton
             android:id="@+id/navMusic"
             android:layout_width="0dp"
@@ -949,6 +950,17 @@
             android:layout_height="28dp"
             android:background="#55808080"
             android:visibility="gone" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- Невидимая «пара» кнопке меню: держит центральную кнопку ровно посередине. -->
+        <View
+            android:layout_width="54dp"
+            android:layout_height="1dp"
+            android:visibility="invisible" />
 
         <ImageButton
             android:id="@+id/navFriends"

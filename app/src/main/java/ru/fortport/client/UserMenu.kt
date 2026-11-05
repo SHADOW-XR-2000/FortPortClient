@@ -1,7 +1,6 @@
 package ru.fortport.client
 
 import android.graphics.Color
-import android.graphics.PorterDuff
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -98,9 +97,9 @@ class UserMenu(
             cornerRadius = dp(radiusDp).toFloat()
         }
 
-    private fun iconView(res: Int, tint: Int, sizeDp: Int = 22): ImageView = ImageView(activity).apply {
-        setImageResource(res)
-        setColorFilter(tint, PorterDuff.Mode.SRC_IN)
+    /** Иконки лежат в assets/ui/icons; нет файла — место под иконку остаётся пустым. */
+    private fun iconView(name: String, sizeDp: Int = 32): ImageView = ImageView(activity).apply {
+        try { activity.assets.open("ui/icons/$name").use { android.graphics.BitmapFactory.decodeStream(it) }?.let { setImageBitmap(it) } } catch (e: Exception) { }
         scaleType = ImageView.ScaleType.FIT_CENTER
         layoutParams = LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp))
     }
@@ -118,8 +117,9 @@ class UserMenu(
         panel.background = g(c.menu1, c.menu2, c.menuBorder, 2, 10)
         panel.clipToOutline = true
         panel.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
-        overlay.addView(panel, FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
-            topMargin = dp(70) // сразу под верхней панелью
+        overlay.addView(panel, FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.START).apply {
+            bottomMargin = dp(60) // сразу над нижней панелью
+            marginStart = dp(8)
         })
 
         panel.addView(header())
@@ -131,13 +131,13 @@ class UserMenu(
         }
         left.addView(balanceRow())
         left.addView(divider())
-        left.addView(row(R.drawable.ic_m_settings, "Настройки", 8) { act(onSettings) })
-        left.addView(row(R.drawable.ic_m_help, "Поддержка", 8) { act { onPage("/support") } })
-        left.addView(row(R.drawable.ic_m_info, "О нас", 8) { act { onPage("/about") } })
-        left.addView(row(R.drawable.ic_m_lock, "Конфиденциальность", 8) { act { onPage("/privacy") } })
-        left.addView(row(R.drawable.ic_m_doc, "Условия", 8) { act { onPage("/terms") } })
+        left.addView(row("setting_icon.png", "Настройки", 8) { act(onSettings) })
+        left.addView(row("info.png", "Поддержка", 8) { act { onPage("/support") } })
+        left.addView(row("ic_nav_home.png", "О нас", 8) { act { onPage("/about") } })
+        left.addView(row("confidence.png", "Конфиденциальность", 8) { act { onPage("/privacy") } })
+        left.addView(row("terms.png", "Условия", 8) { act { onPage("/terms") } })
         left.addView(divider())
-        left.addView(row(R.drawable.ic_m_refresh, "Проверить обновления", 8) { act(onUpdate) })
+        left.addView(row("check_update.png", "Проверить обновления", 8) { act(onUpdate) })
 
         val right = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -145,10 +145,10 @@ class UserMenu(
             setPadding(dp(6), dp(8), dp(8), dp(8))
         }
         // Пункты разнесены сильнее левых, чтобы не задеть соседний.
-        right.addView(row(R.drawable.ic_m_music, "Музыка", 14) { act(onMusic) })
-        right.addView(row(R.drawable.ic_m_ports, "Порты", 14) { act(onPorts) })
-        right.addView(row(R.drawable.ic_m_friends, "Друзья", 14) { act(onFriends) })
-        right.addView(row(R.drawable.ic_m_chat, "Переписки", 14) { act(onChats) })
+        right.addView(row("audios_aero.webp", "Музыка", 14) { act(onMusic) })
+        right.addView(row("communities_aero.webp", "Порты", 14) { act(onPorts) })
+        right.addView(row("friends_aero.webp", "Друзья", 14) { act(onFriends) })
+        right.addView(row("chats_aero.webp", "Переписки", 14) { act(onChats) })
 
         body.addView(left, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.35f))
         body.addView(View(activity).apply { setBackgroundColor(c.rightLine) }, LinearLayout.LayoutParams(1, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -201,7 +201,7 @@ class UserMenu(
         background = g(c.bal1, c.bal2, c.balBorder, 1, 3)
         setPadding(dp(10), dp(10), dp(10), dp(10))
         isClickable = true; isFocusable = true
-        addView(iconView(R.drawable.ic_m_coin, c.gold))
+        addView(iconView("cd_coin.png"))
         addView(TextView(activity).apply { text = "CD-баланс"; textSize = 15f; setTextColor(c.text) },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(10) })
         coinsValue.text = "—"
@@ -212,13 +212,13 @@ class UserMenu(
         setOnClickListener { act(onTopUp) }
     }
 
-    private fun row(icon: Int, label: String, vPadDp: Int, onClick: () -> Unit): View = LinearLayout(activity).apply {
+    private fun row(icon: String, label: String, vPadDp: Int, onClick: () -> Unit): View = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         background = itemBg()
         isClickable = true; isFocusable = true
         setPadding(dp(10), dp(vPadDp), dp(10), dp(vPadDp))
-        addView(iconView(icon, c.icon))
+        addView(iconView(icon))
         addView(TextView(activity).apply {
             text = label
             textSize = 15f
@@ -247,7 +247,7 @@ class UserMenu(
                 addState(intArrayOf(), GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c.end1, c.end2, c.end3, c.end4))
                     .apply { setStroke(dp(1), c.endBorder); cornerRadius = dp(4).toFloat() })
             }
-            addView(iconView(R.drawable.ic_m_power, c.endText, 18))
+            addView(iconView("logout.png", 26))
             addView(TextView(activity).apply {
                 text = "Завершить сессию"; textSize = 15f; setTextColor(c.endText)
                 setTypeface(null, android.graphics.Typeface.BOLD)
@@ -265,7 +265,7 @@ class UserMenu(
         if (isShowing) return
         overlay.alpha = 0f
         overlay.visibility = View.VISIBLE
-        panel.translationY = -dp(16).toFloat()
+        panel.translationY = dp(16).toFloat()
         overlay.animate().alpha(1f).setDuration(120).start()
         panel.animate().translationY(0f).setDuration(120).start()
         refresh()
