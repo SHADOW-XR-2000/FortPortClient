@@ -424,7 +424,12 @@ class MainActivity : AppCompatActivity() {
             onSettings = { openNativeSettings() },
             onPage = { path -> openSitePage(path) },
             onUpdate = { Toast.makeText(this, "Проверка обновлений пока недоступна", Toast.LENGTH_SHORT).show() },
-            onLogout = { logout() }
+            onLogout = { logout() },
+            // Кнопки нижней панели переехали в меню: вызываем те же обработчики.
+            onMusic = { findViewById<View>(R.id.navMusic).performClick() },
+            onPorts = { findViewById<View>(R.id.navCommunities).performClick() },
+            onFriends = { findViewById<View>(R.id.navFriends).performClick() },
+            onChats = { findViewById<View>(R.id.navChats).performClick() }
         )
         navProfileAvatar = userMenu.avatar
         navNotifBadge = findViewById(R.id.navNotifBadge)
@@ -1924,7 +1929,7 @@ class MainActivity : AppCompatActivity() {
         val noPost = (nativeSection != null && nativeSection != NativeSection.FEED && !ownProfile && !portPost) || NO_POST_PATH_PREFIXES.any { path == it || path.startsWith("$it/") }
         // INVISIBLE (а не GONE) сохраняет ширину кнопки — это и есть пустое место по центру.
         findViewById<View>(R.id.navAddPost).visibility = if (noPost) View.INVISIBLE else View.VISIBLE
-        val dividerVis = if (noPost) View.VISIBLE else View.GONE
+        val dividerVis = View.GONE // боковых кнопок в нижней панели больше нет
         findViewById<View>(R.id.navGapDividerLeft).visibility = dividerVis
         findViewById<View>(R.id.navGapDividerRight).visibility = dividerVis
         // В разделах с нативной шапкой «Домой» занимает место кнопки поста

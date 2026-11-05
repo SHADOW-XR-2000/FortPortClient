@@ -878,7 +878,7 @@
         android:clipChildren="false"
         android:clipToPadding="false"
         android:elevation="8dp"
-        android:gravity="center_vertical"
+        android:gravity="center"
         android:orientation="horizontal"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -892,7 +892,7 @@
             android:background="@android:color/transparent"
             android:padding="8dp"
             android:scaleType="fitCenter"
-            android:contentDescription="@string/nav_music" />
+            android:contentDescription="@string/nav_music"     android:visibility="gone" />
 
         <ImageButton
             android:id="@+id/navCommunities"
@@ -902,7 +902,7 @@
             android:background="@android:color/transparent"
             android:padding="8dp"
             android:scaleType="fitCenter"
-            android:contentDescription="@string/nav_communities" />
+            android:contentDescription="@string/nav_communities"     android:visibility="gone" />
 
         <View
             android:id="@+id/navGapDividerLeft"
@@ -958,7 +958,7 @@
             android:background="@android:color/transparent"
             android:padding="8dp"
             android:scaleType="fitCenter"
-            android:contentDescription="@string/nav_friends" />
+            android:contentDescription="@string/nav_friends"     android:visibility="gone" />
 
         <ImageButton
             android:id="@+id/navChats"
@@ -968,7 +968,7 @@
             android:background="@android:color/transparent"
             android:padding="8dp"
             android:scaleType="fitCenter"
-            android:contentDescription="@string/nav_chats" />
+            android:contentDescription="@string/nav_chats"     android:visibility="gone" />
 
     </LinearLayout>
 
