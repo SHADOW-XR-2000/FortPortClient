@@ -856,8 +856,8 @@ class MainActivity : AppCompatActivity() {
      * updateAuthButtons() в auth.js), которую прячем через injectNavCleanup().
      */
     private fun setupTopNav() {
-        // Правый угол: кнопка раскрывает меню пользователя; слева — уведомления.
-        findViewById<ImageButton>(R.id.navHome).setOnClickListener { userMenu.toggle() }
+        // Меню пользователя открывает кнопка в левом углу нижней панели; здесь — уведомления.
+        findViewById<ImageButton>(R.id.navMenu).setOnClickListener { showBottomNav(); userMenu.toggle() }
         findViewById<ImageButton>(R.id.navNotifs).apply {
             setImageBitmap(loadAssetIcon("ui/icons/bell_aero.webp"))
             setOnClickListener { openNotifications() }
