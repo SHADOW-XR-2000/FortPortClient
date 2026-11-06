@@ -1,6 +1,7 @@
 name: Release APK
 # Собирает подписанный APK и публикует его как GitHub Release (тег build-N).
 # Из этих релизов приложение берёт обновления (UpdateManager).
+# Запускается только вручную (Actions -> Release APK -> Run workflow): импорт и push релиз не выпускают.
 on:
   workflow_dispatch:
     inputs:
@@ -8,9 +9,6 @@ on:
         description: "Что нового (показывается в окне обновления)"
         required: false
         default: ""
-  push:
-    branches: [main, master]
-    paths-ignore: ["**.md"]
 permissions:
   contents: write
 concurrency:
@@ -93,7 +91,7 @@ jobs:
           cp "$APK" "FortPortClient-$N.apk"
           [ -n "$NOTES" ] || NOTES="Обновление до версии $VN"
           gh release create "build-$N" "FortPortClient-$N.apk" \
-            --target "$GITHUB_SHA" --title "$VN (сборка $N)" --notes "$NOTES"
+            --target "$GITHUB_SHA" --title "$VN" --notes "$NOTES"
       - name: Delete old releases (keep 10)
         env:
           GH_TOKEN: ${{ github.token }}
