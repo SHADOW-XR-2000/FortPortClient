@@ -1,0 +1,70 @@
+name: Release APK
+# Собирает подписанный APK и публикует его как GitHub Release (тег build-N).
+# Из этих релизов приложение берёт обновления (UpdateManager).
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "Что нового (показывается в окне обновления)"
+        required: false
+        default: ""
+  push:
+    branches: [main, master]
+    paths-ignore: ["**.md"]
+permissions:
+  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      KS_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+      KS_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+      KS_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+      KS_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+    steps:
+      - name: Check signing secrets
+        run: |
+          if [ -z "$KS_BASE64" ] || [ -z "$KS_PASSWORD" ] || [ -z "$KS_ALIAS" ] || [ -z "$KS_KEY_PASSWORD" ]; then
+            echo "::error::Не заданы секреты подписи (SIGNING_KEYSTORE_BASE64, SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS, SIGNING_KEY_PASSWORD). См. README, раздел «Обновления»."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+      - name: Decode keystore
+        run: echo "$KS_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Build signed release APK
+        env:
+          FP_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          FP_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          FP_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          FP_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease -PversionCode=${{ github.run_number }} --no-daemon
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -e
+          N=${{ github.run_number }}
+          VN=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -n1)
+          cp "$APK" "FortPortClient-$N.apk"
+          [ -n "$NOTES" ] || NOTES="Обновление до версии $VN"
+          gh release create "build-$N" "FortPortClient-$N.apk" \
+            --target "$GITHUB_SHA" --title "$VN (сборка $N)" --notes "$NOTES"
+      - name: Delete old releases (keep 10)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 100 --json tagName --jq '.[10:][].tagName' | while read -r t; do
+            gh release delete "$t" --cleanup-tag --yes || true
+          done
