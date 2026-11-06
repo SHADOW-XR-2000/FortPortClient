@@ -36,8 +36,6 @@ jobs:
           git commit -m "Update sources from zip" || echo "nothing to commit"
           git push
       - name: Start build
-        run: |
-          gh workflow run build.yml
-          gh workflow run release.yml
+        run: gh workflow run build.yml
         env:
           GH_TOKEN: ${{ github.token }}
