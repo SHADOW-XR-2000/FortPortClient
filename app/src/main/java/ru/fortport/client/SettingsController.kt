@@ -396,6 +396,19 @@ class SettingsController(
             gravity = Gravity.CENTER
         }, 18)
         applyEnabled(mascotEnabled())
+
+        // --- блок «Обновления» (GitHub Releases, см. UpdateManager)
+        b.addView(View(activity).apply { setBackgroundColor(LINE) }, UiUtil.lp(UiUtil.MATCH, dp(2)).apply { setMargins(0, dp(18), 0, dp(14)) })
+        b.add(title("Обновления").apply { textSize = 24f })
+        b.add(UiUtil.text(activity, 14f, UiUtil.TEXT).apply {
+            text = "Установлена версия ${UpdateManager.versionLabel(activity)}"
+            gravity = Gravity.CENTER
+        }, 8)
+        b.add(toggle("Проверять при запуске:", UpdateManager.autoCheckEnabled(activity)) { UpdateManager.setAutoCheck(activity, it) }, 12)
+        val checkBtn = button("Проверить обновления") {
+            UpdateManager.check(activity, manual = true) { text, good -> toast(text, good) }
+        }.apply { textSize = 16f }
+        b.add(checkBtn, 10)
     }
 
     private fun setChildrenEnabled(v: View, on: Boolean) {

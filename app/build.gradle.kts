@@ -13,12 +13,28 @@ android {
         applicationId = "ru.fortport.client"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
+        // CI передаёт номер сборки (-PversionCode=N): по нему приложение понимает, что вышло обновление
+        versionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
         versionName = "0.6.4"
+    }
+
+    // Подпись релизов. Ключ один и тот же для всех сборок — иначе Android не поставит
+    // обновление поверх установленного приложения. Параметры приходят из секретов GitHub (release.yml).
+    val releaseKeystore = System.getenv("FP_KEYSTORE_FILE")
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("FP_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("FP_KEY_ALIAS")
+                keyPassword = System.getenv("FP_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
