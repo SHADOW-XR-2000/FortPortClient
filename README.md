@@ -13,17 +13,13 @@
 Вручную: Actions → Release APK → Run workflow; в поле «notes» можно написать, что нового (это текст из окна обновления).
 Хранятся последние 10 релизов.
 
-**Один раз настроить подпись.** Android ставит обновление поверх приложения только если APK подписан тем же ключом,
-поэтому ключ должен быть постоянным. Создайте его (на любом компьютере с Java):
-
-```
-keytool -genkeypair -v -keystore fortport-release.jks -alias fortport -keyalg RSA -keysize 2048 -validity 36500
-base64 -w0 fortport-release.jks     # (на Windows: certutil -encode или любой base64-кодировщик)
-```
-
-и добавьте в репозитории Settings → Secrets and variables → Actions четыре секрета:
-`SIGNING_KEYSTORE_BASE64` (вывод base64), `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS` (`fortport`), `SIGNING_KEY_PASSWORD`.
-Файл `.jks` и пароли храните в надёжном месте: потеряете ключ — обновлять придётся переустановкой.
+**Один раз настроить подпись.** Android ставит обновление поверх приложения только если APK подписан тем же ключом.
+Проще всего (хватит телефона): Settings → Secrets and variables → Actions → New repository secret →
+имя `SIGNING_PASSPHRASE`, значение — длинная фраза (от 12 символов, лучше 20+; сохраните её!).
+При первом запуске `Release APK` сам создаст ключ и сохранит его в зашифрованном виде в ветке `signing`
+(эту ветку не удаляйте; пароль потеряете или смените секрет — ключ не расшифруется).
+Свой ключ можно задать вместо этого четырьмя секретами: `SIGNING_KEYSTORE_BASE64`, `SIGNING_STORE_PASSWORD`,
+`SIGNING_KEY_ALIAS`, `SIGNING_KEY_PASSWORD` (получаются через `keytool -genkeypair ...` и base64 от `.jks`).
 
 Первую версию с механизмом обновления (и перейти с debug-сборок из `Build APK`) нужно один раз поставить вручную из
 Releases, предварительно удалив старую: подпись у неё другая. Дальше всё обновляется из приложения.
