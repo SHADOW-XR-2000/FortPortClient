@@ -362,6 +362,10 @@ class LoginController(
         btn.text = if (b) "Подождите…" else label
     }
 
+    /** «Нет связи с сервером» + причина (например, UnknownHostException), чтобы понять, что именно не так. */
+    private fun netErrText(): String =
+        "Нет связи с сервером" + api.lastError.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+
     private fun parse(body: String): JSONObject? = try { JSONObject(body) } catch (e: Exception) { null }
 
     private fun doLogin(identifier: String, password: String, msg: TextView, btn: Button) {
@@ -376,7 +380,7 @@ class LoginController(
             activity.runOnUiThread {
                 if (destroyed) return@runOnUiThread
                 setBusy(false, btn, "Войти")
-                if (netErr || r == null) { showMsg(msg, "Нет связи с сервером"); return@runOnUiThread }
+                if (netErr || r == null) { showMsg(msg, netErrText()); return@runOnUiThread }
                 val o = parse(r.body)
                 if (o == null) { showMsg(msg, "Сервер вернул некорректный ответ"); return@runOnUiThread }
                 val ok = r.code in 200..299 && o.optBoolean("success", false)
@@ -465,7 +469,7 @@ class LoginController(
                     activity.runOnUiThread {
                         if (destroyed) return@runOnUiThread
                         setBusy(false, btn, "Подтвердить")
-                        if (r == null) { showMsg(msg, "Нет связи с сервером"); return@runOnUiThread }
+                        if (r == null) { showMsg(msg, netErrText()); return@runOnUiThread }
                         val o = parse(r.body)
                         if (o == null) { showMsg(msg, "Сервер вернул некорректный ответ"); return@runOnUiThread }
                         if (r.code !in 200..299 || !o.optBoolean("success", false)) {
@@ -522,7 +526,7 @@ class LoginController(
                     activity.runOnUiThread {
                         if (destroyed) return@runOnUiThread
                         setBusy(false, btn, "Отправить письмо для подтверждения")
-                        if (r == null) { showMsg(msg, "Нет связи с сервером"); return@runOnUiThread }
+                        if (r == null) { showMsg(msg, netErrText()); return@runOnUiThread }
                         val o = parse(r.body)
                         if (o == null || r.code !in 200..299 || !o.optBoolean("success", false)) {
                             showMsg(msg, (if (o != null) api.str(o, "error") else "").ifEmpty { "Ошибка ${r.code}" })
@@ -580,7 +584,7 @@ class LoginController(
                         setBusy(false, btn, label)
                         val o = if (r != null) parse(r.body) else null
                         status.text = when {
-                            r == null -> "Нет связи с сервером"
+                            r == null -> netErrText()
                             o == null -> "Сервер вернул некорректный ответ"
                             r.code !in 200..299 || !o.optBoolean("success", false) ->
                                 api.str(o, "error").ifEmpty { "Ошибка ${r.code}" }
@@ -689,7 +693,7 @@ class LoginController(
                     activity.runOnUiThread {
                         if (destroyed) return@runOnUiThread
                         setBusy(false, btn, "Зарегистрироваться")
-                        if (r == null) { showMsg(msg, "Нет связи с сервером"); return@runOnUiThread }
+                        if (r == null) { showMsg(msg, netErrText()); return@runOnUiThread }
                         val o = parse(r.body)
                         if (o == null) { showMsg(msg, "Ошибка сервера"); return@runOnUiThread }
                         if (r.code !in 200..299 || !o.optBoolean("success", false)) {
@@ -751,7 +755,7 @@ class LoginController(
                     activity.runOnUiThread {
                         if (destroyed) return@runOnUiThread
                         setBusy(false, resend, "Отправить письмо снова")
-                        if (r == null) { showMsg(status, "Нет связи с сервером"); return@runOnUiThread }
+                        if (r == null) { showMsg(status, netErrText()); return@runOnUiThread }
                         val o = parse(r.body)
                         if (o == null) { showMsg(status, "Ошибка сервера"); return@runOnUiThread }
                         if (r.code in 200..299 && o.optBoolean("success", false)) {
@@ -785,7 +789,7 @@ class LoginController(
             activity.runOnUiThread {
                 if (destroyed) return@runOnUiThread
                 setBusy(false, btn, label)
-                if (r == null) { showMsg(msg, "Нет связи с сервером"); return@runOnUiThread }
+                if (r == null) { showMsg(msg, netErrText()); return@runOnUiThread }
                 val o = parse(r.body)
                 if (o == null) { showMsg(msg, "Сервер вернул некорректный ответ"); return@runOnUiThread }
                 if (r.code !in 200..299 || !o.optBoolean("success", false)) {
