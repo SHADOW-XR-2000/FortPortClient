@@ -81,8 +81,8 @@ object UpdateManager {
     fun installedName(ctx: Context): String =
         ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "?"
 
-    /** Строка «0.6.4 (сборка 12)» для экрана настроек. */
-    fun versionLabel(ctx: Context) = "${installedName(ctx)} (сборка ${installedBuild(ctx)})"
+    /** Версия для экрана настроек: просто «0.6.4» (номер сборки — внутренний, см. versionCode). */
+    fun versionLabel(ctx: Context) = installedName(ctx)
 
     // ------------------------------------------------------------------ проверка
 
@@ -163,7 +163,10 @@ object UpdateManager {
     private fun showOffer(activity: Activity, rel: Release, manual: Boolean) {
         if (activity.isFinishing || activity.isDestroyed) return
         val text = buildString {
-            append("Новая версия: ${rel.title}\nУстановлена: ${versionLabel(activity)}")
+            // Если название версии то же (поменялась только сборка) — различаем по номеру сборки.
+            val same = rel.title == installedName(activity)
+            append("Новая версия: ${rel.title}" + if (same) " (сборка ${rel.build})" else "")
+            append("\nУстановлена: ${installedName(activity)}" + if (same) " (сборка ${installedBuild(activity)})" else "")
             if (rel.size > 0) append("\nРазмер: %.1f МБ".format(rel.size / 1048576.0))
             if (rel.notes.isNotEmpty()) {
                 append("\n\n")

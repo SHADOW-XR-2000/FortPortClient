@@ -106,14 +106,25 @@ class SiteApi(private val activity: AppCompatActivity) {
             else -> ByteArray(0).toRequestBody(null)
         }
         val req = Request.Builder().url(ORIGIN + path).method(method, body).build()
-        client.newCall(req).execute().use { return Resp(it.code, it.body?.string().orEmpty()) }
+        return execute(req)
+    }
+
+    /** Причина последнего сбоя запроса (класс исключения + сообщение) — для диагностики «Нет связи с сервером». */
+    @Volatile var lastError = ""
+
+    private fun execute(req: Request): Resp = try {
+        client.newCall(req).execute().use { Resp(it.code, it.body?.string().orEmpty()) }.also { lastError = "" }
+    } catch (e: Exception) {
+        lastError = "${e.javaClass.simpleName}: ${e.message.orEmpty()}".take(140)
+        android.util.Log.w("SiteApi", "${req.method} ${req.url.encodedPath} failed", e)
+        throw e
     }
 
     /** multipart-запрос (новый пост, комментарий, картинка); в тестовом режиме — в локальную «базу». */
     fun sendMultipart(method: String, path: String, body: MultipartBody): Resp {
         demo?.let { return it.handleMultipart(method, path, body) }
         val req = Request.Builder().url(ORIGIN + path).method(method, body).build()
-        client.newCall(req).execute().use { return Resp(it.code, it.body?.string().orEmpty()) }
+        return execute(req)
     }
 
     /** 0 — id известен, 1 — нет авторизации, 2 — ошибка сети/сервера. */
