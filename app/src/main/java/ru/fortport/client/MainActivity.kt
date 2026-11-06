@@ -427,7 +427,7 @@ class MainActivity : AppCompatActivity() {
             },
             onSettings = { openNativeSettings() },
             onPage = { path -> openSitePage(path) },
-            onUpdate = { Toast.makeText(this, "Проверка обновлений пока недоступна", Toast.LENGTH_SHORT).show() },
+            onUpdate = { UpdateManager.check(this, manual = true) },
             onLogout = { logout() },
             // Кнопки нижней панели переехали в меню: вызываем те же обработчики.
             onMusic = { findViewById<View>(R.id.navMusic).performClick() },
