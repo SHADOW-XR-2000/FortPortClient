@@ -965,7 +965,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         sectionHeader.visibility = if (section != null) View.VISIBLE else View.GONE
-        topNavBar.visibility = if (barsVisible && section == null && !inPost && !inSettings) View.VISIBLE else View.GONE
+        topNavBar.visibility = View.GONE // верхней royal-панели больше нет: меню и уведомления — в нижней панели
         settingsTopBar.visibility = if (inSettings) View.VISIBLE else View.GONE
         postTopBar.visibility = if (inPost) View.VISIBLE else View.GONE
         // Открытый пост: нижней панели нет, она возвращается после выхода из поста.
