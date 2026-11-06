@@ -202,13 +202,15 @@ class UserMenu(
         setPadding(dp(10), dp(10), dp(10), dp(10))
         isClickable = true; isFocusable = true
         addView(iconView("cd_coin.png"))
-        addView(TextView(activity).apply { text = "CD-баланс"; textSize = 15f; setTextColor(c.text) },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(10) })
+        // Подпись «CD-баланс» убрана: вместе со значением в колонку не влезало (иконка монеты поясняет).
+        contentDescription = "CD-баланс"
         coinsValue.text = "—"
         coinsValue.textSize = 15f
         coinsValue.setTypeface(null, android.graphics.Typeface.BOLD)
         coinsValue.setTextColor(c.balValue)
-        addView(coinsValue)
+        coinsValue.maxLines = 1
+        (coinsValue.parent as? ViewGroup)?.removeView(coinsValue)
+        addView(coinsValue, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(10) })
         setOnClickListener { act(onTopUp) }
     }
 
