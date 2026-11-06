@@ -164,6 +164,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        UpdateManager.cleanup(this)
+        // Проверка обновлений через GitHub Releases: не чаще раза в 6 часов, не мешает загрузке экрана.
+        window.decorView.postDelayed({ UpdateManager.autoCheck(this) }, 4000)
+
         webView = findViewById(R.id.webView)
         swipeRefresh = findViewById(R.id.swipeRefresh)
         progressBar = findViewById(R.id.progressBar)
