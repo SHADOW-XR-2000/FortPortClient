@@ -1,0 +1,32 @@
+name: Check site certificate
+# Диагностика ошибки приложения "Trust anchor for certification path not found":
+# показывает, какую цепочку сертификатов отдаёт fortport.ru и доверяет ли ей обычный набор корневых CA.
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: "Хост"
+        required: true
+        default: "fortport.ru"
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show certificate chain
+        env:
+          HOST: ${{ inputs.host }}
+        run: |
+          echo "=== Цепочка, которую отдаёт сервер ==="
+          openssl s_client -connect "$HOST:443" -servername "$HOST" -showcerts </dev/null 2>/dev/null > chain.txt || true
+          grep -E "^( [0-9] s:|   i:|   a:|   v:|Verification|Verify return code)" chain.txt || true
+          grep -c "BEGIN CERTIFICATE" chain.txt | sed 's/^/Сертификатов в цепочке: /'
+          echo
+          echo "=== Листовой сертификат ==="
+          openssl s_client -connect "$HOST:443" -servername "$HOST" </dev/null 2>/dev/null \
+            | openssl x509 -noout -subject -issuer -dates -ext subjectAltName,authorityInfoAccess 2>&1 || true
+          echo
+          echo "=== Проверка по системному набору корневых CA (как в Linux/Chrome) ==="
+          openssl s_client -connect "$HOST:443" -servername "$HOST" -verify_return_error </dev/null 2>&1 | grep -E "Verify return code|verify error|Verification" || true
+          echo
+          echo "=== curl ==="
+          curl -sS -o /dev/null -w "HTTP %{http_code}, ssl_verify_result=%{ssl_verify_result}\n" "https://$HOST/" 2>&1 || true
