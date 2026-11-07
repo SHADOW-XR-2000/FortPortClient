@@ -1,7 +1,8 @@
 name: Release APK
 # Собирает подписанный APK и публикует его как GitHub Release (тег build-N).
 # Из этих релизов приложение берёт обновления (UpdateManager).
-# Запускается только вручную (Actions -> Release APK -> Run workflow): импорт и push релиз не выпускают.
+# Запускается только вручную (Actions -> Release APK -> Run workflow): импорт и push ничего не выпускают.
+# Подписанный APK всегда кладётся в Artifacts (как у Build APK); Release создаётся, только если отмечено «publish».
 on:
   workflow_dispatch:
     inputs:
@@ -9,6 +10,10 @@ on:
         description: "Что нового (показывается в окне обновления)"
         required: false
         default: ""
+      publish:
+        description: "Опубликовать как GitHub Release (из него обновляется приложение). Без галочки — только подписанный APK в Artifacts"
+        type: boolean
+        default: false
 permissions:
   contents: write
 concurrency:
@@ -79,7 +84,13 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Build signed release APK
         run: gradle :app:assembleRelease -PversionCode=${{ github.run_number }} --no-daemon
+      - name: Upload signed APK (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: FortPortClient-release-apk-${{ github.run_number }}
+          path: app/build/outputs/apk/release/*.apk
       - name: Publish release
+        if: ${{ inputs.publish }}
         env:
           GH_TOKEN: ${{ github.token }}
           NOTES: ${{ inputs.notes }}
@@ -93,6 +104,7 @@ jobs:
           gh release create "build-$N" "FortPortClient-$N.apk" \
             --target "$GITHUB_SHA" --title "$VN" --notes "$NOTES"
       - name: Delete old releases (keep 10)
+        if: ${{ inputs.publish }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
