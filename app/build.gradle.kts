@@ -15,7 +15,7 @@ android {
         targetSdk = 34
         // CI передаёт номер сборки (-PversionCode=N): по нему приложение понимает, что вышло обновление
         versionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
-        versionName = "0.8.01"
+        versionName = "0.6.4"
     }
 
     // Подпись релизов. Ключ один и тот же для всех сборок — иначе Android не поставит

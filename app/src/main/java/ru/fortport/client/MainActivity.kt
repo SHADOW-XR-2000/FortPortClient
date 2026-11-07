@@ -409,7 +409,7 @@ class MainActivity : AppCompatActivity() {
             pickImage = { done -> commentPickCb = done; commentPicker.launch("image/*") },
             onAuthLost = authLost
         )
-        mascot = MascotOverlay(this, findViewById(R.id.rootLayout), siteApi, R.id.bottomNavBar)
+        mascot = MascotOverlay(this, findViewById(R.id.rootLayout), siteApi, listOf(bottomNavBar, notifBottomBar))
         findViewById<View>(R.id.postBackButton).setOnClickListener { onBackPressed() }
         findViewById<View>(R.id.settingsBackButton).setOnClickListener { onBackPressed() }
         listOf(R.id.postBackButton, R.id.settingsBackButton).forEach { id ->
@@ -1103,11 +1103,11 @@ class MainActivity : AppCompatActivity() {
         }
         if (section == NativeSection.PORT) {
             portController.setCommunity(pendingCommunityId)
-            if (nativeSection == NativeSection.PORT) { portController.stop(); startNativeLoading(); return }
+            if (nativeSection == NativeSection.PORT) { portController.stop(); startNativeLoading(); updateMascot(section); return }
         }
         if (section == NativeSection.PROFILE) {
             profileController.setUser(pendingProfileId)
-            if (nativeSection == NativeSection.PROFILE) { profileController.stop(); startNativeLoading(); return }
+            if (nativeSection == NativeSection.PROFILE) { profileController.stop(); startNativeLoading(); updateMascot(section); return }
         }
         if (nativeSection == section) return
         // Переключение между нативными вкладками: прежнюю останавливаем и прячем.
@@ -1127,7 +1127,22 @@ class MainActivity : AppCompatActivity() {
         updateAddPostButton(currentUrl)
         showBottomNav()
         startNativeLoading()
-        mascot.onSection(section.name.lowercase())
+        updateMascot(section)
+    }
+
+    /** Маскот «загружает страницу» при смене нативного экрана (как на сайте). null — нативного экрана нет. */
+    private fun updateMascot(section: NativeSection?) {
+        if (!::mascot.isInitialized) return
+        when (section) {
+            null -> mascot.onPage(null)
+            NativeSection.FEED -> mascot.onPage("feed")
+            NativeSection.COMMUNITIES -> mascot.onPage("communities")
+            NativeSection.PORT -> mascot.onPage("community", pendingCommunityId)
+            NativeSection.PROFILE -> mascot.onPage("profile", pendingProfileId)
+            NativeSection.SETTINGS -> mascot.onPage("settings")
+            NativeSection.FRIENDS -> mascot.onPage("friends")
+            else -> mascot.onPage("other")
+        }
     }
 
     /** Нативная страница поста (концепция 3). [post] — уже загруженная карточка из ленты, чтобы показать её сразу. */
@@ -1250,7 +1265,7 @@ class MainActivity : AppCompatActivity() {
         nativePortPanel.visibility = View.GONE
         nativeNotifsPanel.visibility = View.GONE
         nativeSettingsPanel.visibility = View.GONE
-        mascot.onSection(null)
+        updateMascot(null)
         stopNativeControllers()
         resetNativeSearch(was)
         updateAddPostButton(currentUrl)

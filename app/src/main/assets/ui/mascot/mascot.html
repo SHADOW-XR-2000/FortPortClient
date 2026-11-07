@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <style>
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
-  #stage { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+  /* Сцена всегда 90x124 (размер маскота) по центру окна; поворот и отражение (вися на стене, лицом к центру)
+     делаются здесь, а не поворотом самого WebView — так видео надёжнее рисуется. */
+  #stage { position: absolute; left: 50%; top: 50%; width: 90px; height: 124px; margin: -62px 0 0 -45px;
+           transform-origin: 50% 50%; }
   video { position: absolute; left: 0; top: 0; width: 100%; height: 100%;
           object-fit: contain; object-position: center bottom; background: transparent; pointer-events: none; }
 </style>
@@ -13,25 +16,26 @@
 <body>
 <div id="stage"></div>
 <script>
-  // Анимации маскота — прозрачные WebM (VP9 с альфа-каналом), их умеет только Chromium/WebView,
-  // поэтому маскот рисуется в небольшом прозрачном WebView (MascotOverlay.kt).
+  // Анимации маскота — прозрачные WebM (VP9 с альфа-каналом): альфу умеет только Chromium/WebView (см. MascotOverlay.kt).
   var stage = document.getElementById('stage');
   var cur = null;
+  function setPose(rot, flip) {
+    stage.style.transform = 'rotate(' + rot + 'deg) scaleX(' + (flip ? -1 : 1) + ')';
+  }
   function play(name, loop) {
     var v = document.createElement('video');
     v.muted = true; v.playsInline = true; v.loop = !!loop; v.preload = 'auto';
     v.style.visibility = 'hidden';
     v.src = '/assets/ui/mascot/mascot-' + name + '.webm';
+    // новое видео подменяет прежнее, только когда реально пошло: без мигания между анимациями
     v.addEventListener('playing', function () {
       v.style.visibility = 'visible';
       if (cur && cur !== v && cur.parentNode) cur.parentNode.removeChild(cur);
       cur = v;
     });
-    v.addEventListener('ended', function () { try { Mascot.ended(name); } catch (e) {} });
-    v.addEventListener('error', function () { try { Mascot.failed(name); } catch (e) {} });
     stage.appendChild(v);
     var p = v.play();
-    if (p && p.catch) p.catch(function () { try { Mascot.failed(name); } catch (e) {} });
+    if (p && p.catch) p.catch(function () {});
   }
 </script>
 </body>
