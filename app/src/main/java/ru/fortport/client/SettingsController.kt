@@ -461,28 +461,65 @@ class SettingsController(
         })
     }
 
-    /** Дата рождения вводится цифрами: точки подставляются сами (дд.мм.гггг). */
+    /**
+     * Дата рождения «дд.мм.гггг». Раньше любой введённый разделитель стирался, а точки ставились только при вводе
+     * следующей цифры, из-за чего дату нельзя было набрать «как привыкли». Теперь:
+     *  - клавиатура с цифрами, точкой и дефисом; «-», «/», «,» и пробел превращаются в точку;
+     *  - после полного дня или месяца (две цифры) точка ставится сама, лишний разделитель подряд игнорируется;
+     *  - при стирании ничего не подставляется, поэтому точки можно удалять;
+     *  - при уходе из поля дата приводится к виду «дд.мм.гггг» (7.1.1990 → 07.01.1990, 07011990 → 07.01.1990).
+     */
     private fun dateInput(value: String, onChange: (String) -> Unit): EditText {
-        val et = input(value, false, onChange)
-        et.inputType = InputType.TYPE_CLASS_NUMBER
-        et.hint = "дд.мм.гггг"
+        val et = EditText(activity).apply {
+            setText(value)
+            textSize = 16f
+            setTextColor(UiUtil.TEXT)
+            background = UiUtil.rect(UiUtil.WHITE, LINE, 2, 10, activity)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
+            hint = "дд.мм.гггг"
+            filters = arrayOf(android.text.InputFilter.LengthFilter(10))
+        }
         et.addTextChangedListener(object : TextWatcher {
             var busy = false
-            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            var prevLen = et.text.length
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) { prevLen = s?.length ?: 0 }
             override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 if (busy || s == null) return
                 busy = true
-                val digits = s.filter { it.isDigit() }.take(8)
-                val sb = StringBuilder()
-                digits.forEachIndexed { i, ch -> if (i == 2 || i == 4) sb.append('.'); sb.append(ch) }
-                val f = sb.toString()
-                if (f != s.toString()) s.replace(0, s.length, f)
-                busy = false
-                onChange(f)
+                try {
+                    val grew = s.length > prevLen
+                    // любые разделители → точка; посторонние символы убираем
+                    val cleaned = s.toString().map { if (it in "-/,. ") '.' else it }.filter { it.isDigit() || it == '.' }
+                        .joinToString("").replace(Regex("^\\.+"), "").replace(Regex("\\.{2,}"), ".")
+                    var f = cleaned
+                    // автоточка после полного дня/месяца — только при наборе в конец
+                    if (grew && Regex("^(\\d{2}|\\d{1,2}\\.\\d{2})$").matches(f)) f += "."
+                    if (f != s.toString()) { s.replace(0, s.length, f); et.setSelection(et.text.length) }
+                } finally { busy = false }
+                onChange(et.text.toString())
             }
         })
+        et.setOnFocusChangeListener { _, focused ->
+            if (!focused) {
+                val n = normalizeDob(et.text.toString())
+                if (n != et.text.toString()) et.setText(n)
+                onChange(et.text.toString())
+            }
+        }
         return et
+    }
+
+    /** «7.1.1990», «07-01-1990», «07011990» → «07.01.1990»; нераспознанное возвращается как есть. */
+    private fun normalizeDob(raw: String): String {
+        val s = raw.trim().trimEnd('.')
+        Regex("^(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})$").find(s)?.let {
+            return "%02d.%02d.%s".format(it.groupValues[1].toInt(), it.groupValues[2].toInt(), it.groupValues[3])
+        }
+        Regex("^(\\d{2})(\\d{2})(\\d{4})$").find(s)?.let { return "${it.groupValues[1]}.${it.groupValues[2]}.${it.groupValues[3]}" }
+        return raw
     }
 
     private fun toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit): LinearLayout {
@@ -681,7 +718,7 @@ class SettingsController(
     private fun dobToServer(display: String): String? {
         val s = display.trim()
         if (s.isEmpty()) return ""
-        val m = Regex("^(\\d{2})\\.(\\d{2})\\.(\\d{4})$").find(s) ?: return null
+        val m = Regex("^(\\d{2})\\.(\\d{2})\\.(\\d{4})$").find(normalizeDob(s)) ?: return null
         val day = m.groupValues[1].toInt(); val month = m.groupValues[2].toInt(); val year = m.groupValues[3].toInt()
         val now = Calendar.getInstance()
         if (year < 1900 || year > now.get(Calendar.YEAR) || month !in 1..12) return null

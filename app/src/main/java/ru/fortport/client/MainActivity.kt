@@ -65,6 +65,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var nativeSettingsPanel: View
     private lateinit var settingsTopBar: View
     private lateinit var settingsController: SettingsController
+    private lateinit var mascot: MascotOverlay
     private lateinit var notifBottomBar: View
     private lateinit var postTopBar: View
     private lateinit var sectionHeaderAction: ImageButton
@@ -194,11 +195,13 @@ class MainActivity : AppCompatActivity() {
         notifBottomBar = findViewById(R.id.notifBottomBar)
         postTopBar = findViewById(R.id.postTopBar)
         sectionHeaderAction = findViewById(R.id.sectionHeaderAction)
-        // Основные верхняя (аватар, CD, уведомления) и нижняя (музыка, порты, пост/домой, друзья, переписки)
-        // панели рисуются картинками из assets/ui (*_royal_panel-invert.png); нет файла — прежний цвет.
-        // То же — у шапок разделов (музыка, порты, друзья, переписки), поста, настроек и панели уведомлений. Шаблоны постов не трогаем (UiUtil.royal).
-        listOf(topNavBar, bottomNavBar, sectionHeader, postTopBar, settingsTopBar, notifBottomBar).forEach { bar ->
-            UiUtil.barSkin(this)?.let { bar.background = it }
+        // Верхние и нижние панели рисуются в стиле Windows 7 Aero (AeroBar, по dock-panel.html): стеклянный градиент,
+        // светлая и тёмная темы. Касается основных панелей, шапок разделов, поста, настроек и панели уведомлений.
+        // Шаблоны постов не трогаем (UiUtil.royal).
+        listOf(topNavBar to false, sectionHeader to false, postTopBar to false, settingsTopBar to false,
+            bottomNavBar to true, notifBottomBar to true).forEach { (bar, atBottom) ->
+            bar.background = AeroBar.skin(this, atBottom)
+            AeroBar.adaptTexts(bar)
         }
         siteApi = SiteApi(this)
         // Идентификатор устройства принадлежит нативному приложению, а не WebView.
@@ -406,6 +409,7 @@ class MainActivity : AppCompatActivity() {
             pickImage = { done -> commentPickCb = done; commentPicker.launch("image/*") },
             onAuthLost = authLost
         )
+        mascot = MascotOverlay(this, findViewById(R.id.rootLayout), siteApi, R.id.bottomNavBar)
         findViewById<View>(R.id.postBackButton).setOnClickListener { onBackPressed() }
         findViewById<View>(R.id.settingsBackButton).setOnClickListener { onBackPressed() }
         listOf(R.id.postBackButton, R.id.settingsBackButton).forEach { id ->
@@ -1123,6 +1127,7 @@ class MainActivity : AppCompatActivity() {
         updateAddPostButton(currentUrl)
         showBottomNav()
         startNativeLoading()
+        mascot.onSection(section.name.lowercase())
     }
 
     /** Нативная страница поста (концепция 3). [post] — уже загруженная карточка из ленты, чтобы показать её сразу. */
@@ -1245,6 +1250,7 @@ class MainActivity : AppCompatActivity() {
         nativePortPanel.visibility = View.GONE
         nativeNotifsPanel.visibility = View.GONE
         nativeSettingsPanel.visibility = View.GONE
+        mascot.onSection(null)
         stopNativeControllers()
         resetNativeSearch(was)
         updateAddPostButton(currentUrl)
@@ -2493,11 +2499,13 @@ class MainActivity : AppCompatActivity() {
             reloadChatsOnResume = false
             if (nativeSection != NativeSection.CHATS) webView.reload()
         }
+        mascot.onResume()
         if (nativeSection != null) startNativeLoading()
     }
 
     override fun onPause() {
         super.onPause()
+        mascot.onPause()
         stopNativeControllers()
     }
 
@@ -2528,6 +2536,7 @@ class MainActivity : AppCompatActivity() {
         portController.destroy()
         notifsController.destroy()
         settingsController.destroy()
+        mascot.destroy()
         siteApi.destroy()
         paymentWebView?.let { it.stopLoading(); it.destroy() }
         paymentWebView = null
