@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  fortport.ru сейчас использует сертификат GlobalSign (цепочка: GlobalSign GCC R46 DV TLS CA 2025 ->
+  GlobalSign Root R46). На части устройств корня R46 нет в системном хранилище, и запросы приложения
+  падают с «Trust anchor for certification path not found» (браузер при этом открывает сайт).
+  Поэтому к системным доверенным корням добавлен этот публичный корневой сертификат.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/globalsign_root_r46" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
