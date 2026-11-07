@@ -909,7 +909,7 @@
                 android:background="@android:color/transparent"
                 android:padding="2dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_nav_home"
+                android:src="@drawable/home_icon"
                 android:visibility="gone"
                 android:contentDescription="@string/nav_home" />
 
@@ -1016,7 +1016,7 @@
             android:background="@android:color/transparent"
             android:padding="2dp"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_nav_home"
+            android:src="@drawable/home_icon"
             android:contentDescription="@string/nav_home" />
 
         <View

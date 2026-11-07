@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  #stage { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+  video { position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+          object-fit: contain; object-position: center bottom; background: transparent; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+  // Анимации маскота — прозрачные WebM (VP9 с альфа-каналом), их умеет только Chromium/WebView,
+  // поэтому маскот рисуется в небольшом прозрачном WebView (MascotOverlay.kt).
+  var stage = document.getElementById('stage');
+  var cur = null;
+  function play(name, loop) {
+    var v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.loop = !!loop; v.preload = 'auto';
+    v.style.visibility = 'hidden';
+    v.src = '/assets/ui/mascot/mascot-' + name + '.webm';
+    v.addEventListener('playing', function () {
+      v.style.visibility = 'visible';
+      if (cur && cur !== v && cur.parentNode) cur.parentNode.removeChild(cur);
+      cur = v;
+    });
+    v.addEventListener('ended', function () { try { Mascot.ended(name); } catch (e) {} });
+    v.addEventListener('error', function () { try { Mascot.failed(name); } catch (e) {} });
+    stage.appendChild(v);
+    var p = v.play();
+    if (p && p.catch) p.catch(function () { try { Mascot.failed(name); } catch (e) {} });
+  }
+</script>
+</body>
+</html>
