@@ -49,6 +49,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Причина аварийного закрытия; отдельный процесс, чтобы открыться даже при падении на старте -->
+        <activity
+            android:name=".CrashActivity"
+            android:exported="false"
+            android:process=":crash"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
+
         <!-- Нативный экран диалога (заменяет веб-версию чата) -->
         <activity
             android:name=".ChatActivity"
