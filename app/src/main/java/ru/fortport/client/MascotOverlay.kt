@@ -68,7 +68,7 @@ class MascotOverlay(
         private const val ART_FACES_LEFT = true
 
         private val EMOTION_RE = Regex("/E([0-9])/")
-        private val CHOICE_RE = Regex("""\$\{choiceOne=`([^`]*)`}\s*\$\{choiceTwo=`([^`]*)`}""")
+        private val CHOICE_RE = Regex("""\$\{choiceOne=`([^`]*)`\}\s*\$\{choiceTwo=`([^`]*)`\}""")
     }
 
     private val settingsPrefs = activity.getSharedPreferences("settings_ui", Context.MODE_PRIVATE)
