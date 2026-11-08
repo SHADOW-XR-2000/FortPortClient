@@ -45,7 +45,9 @@ class SiteApi(private val activity: AppCompatActivity) {
     private val sessionPrefs = activity.getSharedPreferences("fortport_native_session", Context.MODE_PRIVATE)
 
     /** Не null — тестовый режим: все запросы обслуживает локальная «база» (см. DemoBackend). */
-    @Volatile var demo: DemoBackend? = if (sessionPrefs.getBoolean("demo_mode", false)) DemoBackend(activity) else null
+    // Режим не переживает перезапуск: иначе после закрытия приложения в тесте каждый запуск
+    // (включая настоящий вход) обслуживался бы локальной «базой». Сами данные теста сохраняются.
+    @Volatile var demo: DemoBackend? = null.also { sessionPrefs.edit().putBoolean("demo_mode", false).apply() }
     val isDemo: Boolean get() = demo != null
 
     fun enterDemo(): DemoBackend {
@@ -98,7 +100,9 @@ class SiteApi(private val activity: AppCompatActivity) {
 
     /** json == null — тело пустое (для POST) или отсутствует (GET/DELETE). */
     fun send(method: String, path: String, json: String?): Resp {
-        demo?.let { return it.handle(method, path, json) }
+        // Вход настоящим аккаунтом всегда идёт на сервер, даже если тестовый режим остался включённым.
+        val realAuth = path.startsWith("/api/login") || path.startsWith("/api/add-email")
+        if (!realAuth) demo?.let { return it.handle(method, path, json) }
         val body = when {
             method == "GET" -> null
             json != null -> json.toRequestBody(JSON_TYPE) // в т.ч. DELETE с телом (отмена голоса в опросе)

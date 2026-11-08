@@ -1196,7 +1196,7 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh.visibility = View.GONE
         webView.visibility = View.GONE
         updateBarsVisibility()
-        loginController.show()
+        loginController.showLoginError("") // свежая форма входа, а не прежний шаг с кодом
     }
 
     /** Нативные настройки профиля (вкладки «Профиль», «Безопасность», «Кастомизация»). */

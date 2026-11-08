@@ -419,6 +419,8 @@ class LoginController(
     }
 
     private fun finishLogin(user: JSONObject) {
+        if (api.isDemo) api.exitDemo() // настоящий аккаунт: дальше все запросы идут на сервер
+        api.userId = ""
         if (remember) {
             saved.save(
                 user.optLong("id", 0L).toString(), api.str(user, "username"),
