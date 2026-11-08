@@ -132,6 +132,7 @@ class MascotOverlay(
 
     // данные сессии
     private var sessionLoaded = false
+    private var sessionKey: String? = null // кто сейчас в сессии: тестовый режим или реальный аккаунт
     private var username = "друг"
     private var bricked = 0
     private var handHoldingServer = true
@@ -242,7 +243,7 @@ class MascotOverlay(
             hide()
             return
         }
-        val key = "$k:$id"
+        val key = "$k:$id:${sessionIdentity()}"
         if (key == pageKey && started) { box.visibility = View.VISIBLE; return }
         pageKey = key; kind = k; pageId = id; started = false
         val gen = ++generation
@@ -290,6 +291,18 @@ class MascotOverlay(
 
     /** Грузит данные; возвращает то, что относится к конкретной странице (статистика и название). */
     private fun gather(k: String, id: Long): Pair<JSONObject?, String> {
+        val sk = sessionIdentity()
+        if (sk != sessionKey) {
+            // Сменился аккаунт (например, выход из тестового режима): забываем ник и данные прошлой сессии,
+            // иначе маскот продолжает называть пользователя «Dev_Tester».
+            sessionKey = sk
+            sessionLoaded = false
+            username = "друг"
+            bricked = 0
+            handHoldingServer = true
+            pettingRecord = 0
+            newsLines = emptyList(); newsIds = emptyList(); lastNewsFetch = 0L
+        }
         if (!sessionLoaded) {
             getJson("/api/session/bootstrap")?.let { b ->
                 b.optJSONObject("user")?.optString("username")?.takeIf { it.isNotBlank() }?.let { username = it }
@@ -334,6 +347,8 @@ class MascotOverlay(
         }
         return data to title
     }
+
+    private fun sessionIdentity() = "${if (api.isDemo) "demo" else "real"}:${api.userId}"
 
     private fun isOwnProfile() = pageId == 0L || pageId.toString() == api.userId
 
@@ -575,16 +590,28 @@ class MascotOverlay(
         )
         val bh = bubble.measuredHeight
         val gap = dp(4)
+        val margin = dp(8)
         val mx = box.translationX; val my = box.translationY
-        var x: Float; var y: Float
-        when (pose) {
-            Pose.LEFT -> { x = mx + boxW + gap; y = my + boxH / 2f - bh / 2f }
-            Pose.RIGHT -> { x = mx - bw - gap; y = my + boxH / 2f - bh / 2f }
-            else -> {
-                x = mx + boxW / 2f - bw / 2f
-                y = my - bh - gap
-                if (y < dp(8)) y = my + boxH + gap
-            }
+        // Плашка никогда не перекрывает маскота: маскот в верхней половине экрана — плашка под ним,
+        // в нижней — над ним (если не помещается с выбранной стороны, берём другую).
+        val floor = minOf(h, bottomLimit())
+        val below = my + boxH + gap
+        val above = my - bh - gap
+        val fitsBelow = below + bh <= floor - margin
+        val fitsAbove = above >= margin
+        val inUpperHalf = my + boxH / 2f < h / 2f
+        var y = when {
+            inUpperHalf && fitsBelow -> below
+            !inUpperHalf && fitsAbove -> above
+            fitsBelow -> below
+            fitsAbove -> above
+            else -> if (inUpperHalf) below else above
+        }
+        // По горизонтали: у левой/правой стены плашка прижата к тому же краю, иначе центрируется над маскотом.
+        var x = when (pose) {
+            Pose.LEFT -> mx
+            Pose.RIGHT -> mx + boxW - bw
+            else -> mx + boxW / 2f - bw / 2f
         }
         x = x.coerceIn(dpf(8), maxOf(dpf(8), (w - bw - dp(8)).toFloat()))
         y = y.coerceIn(dpf(8), maxOf(dpf(8), (h - bh - dp(8)).toFloat()))
