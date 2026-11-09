@@ -52,12 +52,14 @@ class SettingsController(
     private val host: FrameLayout,
     /** Выбор картинки с устройства; результат приходит в переданный колбэк. */
     private val pickImage: ((Uri) -> Unit) -> Unit,
+    /** Выбор zip-файла (скин маскота); тип проверяется по содержимому. */
+    private val pickZip: ((Uri) -> Unit) -> Unit,
     private val onAuthLost: () -> Unit
 ) {
     private companion object {
         const val TAG = "Settings"
         const val MAX_UPLOAD = 20L * 1024 * 1024
-        const val DEFAULT_MASCOT = "Жека"
+        const val DEFAULT_MASCOT = MascotSkins.DEFAULT
         const val TOPBAR_DP = 70
         val TAB_BLUE = 0xFF1F78FF.toInt()
         val TAB_ACTIVE = 0xFFBEF1FC.toInt()
@@ -378,7 +380,19 @@ class SettingsController(
         val actions = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         val del = button("Удалить") {
             if (chosen == DEFAULT_MASCOT) toast("Основного маскота удалить нельзя", false)
-            else toast("Удаление пользовательских маскотов появится вместе с импортом", false)
+            else AlertDialog.Builder(activity)
+                .setTitle("Удалить маскота?")
+                .setMessage("«$chosen» будет удалён с этого устройства.")
+                .setPositiveButton("Удалить") { _, _ ->
+                    val gone = chosen
+                    if (MascotSkins.delete(activity, gone)) {
+                        if (mascotSelected() == gone) prefs.edit().putString("mascot_selected", DEFAULT_MASCOT).apply()
+                        toast("Маскот удалён", true)
+                    } else toast("Не удалось удалить маскота", false)
+                    rerenderKeepScroll()
+                }
+                .setNegativeButton("Отмена", null)
+                .show()
         }.apply { background = UiUtil.rect(0xFFFF8A80.toInt(), UiUtil.BORDER, 2, 12, activity); textSize = 16f }
         val applyBtn = button("Применить") {
             prefs.edit().putString("mascot_selected", chosen).apply()
@@ -388,7 +402,26 @@ class SettingsController(
         actions.addView(applyBtn, UiUtil.lp(0, dp(48), 1f).apply { leftMargin = dp(10) })
         dependent.add(actions); b.add(actions, 10)
 
-        val importBtn = button("Импортировать") { toast("Импорт маскота пока недоступен", false) }.apply { textSize = 16f }
+        val importBtn = button("Импортировать") {
+            pickZip { uri ->
+                if (activity.isFinishing || activity.isDestroyed) return@pickZip
+                toast("Импорт…", true)
+                Thread {
+                    val result: Pair<String?, String?> = try { MascotSkins.install(activity, uri) to null }
+                    catch (e: MascotSkins.SkinException) { null to (e.message ?: "Неверный архив") }
+                    catch (e: Exception) { Log.w(TAG, "mascot import", e); null to "Не удалось прочитать архив (нужен .zip)" }
+                    activity.runOnUiThread {
+                        if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                        val (name, err) = result
+                        if (name != null) {
+                            prefs.edit().putString("mascot_selected", name).apply() // сразу выбираем импортированного
+                            toast("Маскот «$name» импортирован и выбран", true)
+                            rerenderKeepScroll()
+                        } else toast(err ?: "Ошибка импорта", false)
+                    }
+                }.start()
+            }
+        }.apply { textSize = 16f }
         dependent.add(importBtn); b.add(importBtn, 10)
 
         b.add(UiUtil.text(activity, 13f, UiUtil.TEXT).apply {
@@ -418,7 +451,10 @@ class SettingsController(
     private fun mascotEnabled() = prefs.getBoolean("mascot_enabled", true)
     private fun mascotHints() = prefs.getBoolean("mascot_hints", handHoldingServer)
     private fun mascotSelected() = prefs.getString("mascot_selected", DEFAULT_MASCOT) ?: DEFAULT_MASCOT
-    private fun mascotNames(): List<String> = listOf(DEFAULT_MASCOT) // пользовательские появятся вместе с импортом
+    private fun mascotNames(): List<String> = listOf(DEFAULT_MASCOT) + MascotSkins.installed(activity)
+
+    /** Перерисовать вкладку, не теряя положения прокрутки. */
+    private fun rerenderKeepScroll() { val y = scroll.scrollY; render(); scroll.post { scroll.scrollTo(0, y) } }
 
     private fun infoButton(): View {
         val icon = try { activity.assets.open("ui/icons/info.png").use { android.graphics.BitmapFactory.decodeStream(it) } } catch (e: Exception) { null }

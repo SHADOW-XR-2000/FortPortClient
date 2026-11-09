@@ -407,6 +407,7 @@ class MainActivity : AppCompatActivity() {
             api = siteApi,
             host = findViewById(R.id.settingsHost),
             pickImage = { done -> commentPickCb = done; commentPicker.launch("image/*") },
+            pickZip = { done -> commentPickCb = done; commentPicker.launch("*/*") },
             onAuthLost = authLost
         )
         mascot = MascotOverlay(this, findViewById(R.id.rootLayout), siteApi, listOf(bottomNavBar, notifBottomBar))
