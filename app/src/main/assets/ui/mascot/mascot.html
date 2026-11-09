@@ -22,11 +22,11 @@
   function setPose(rot, flip) {
     stage.style.transform = 'rotate(' + rot + 'deg) scaleX(' + (flip ? -1 : 1) + ')';
   }
-  function play(name, loop) {
+  function play(name, loop, src) {
     var v = document.createElement('video');
     v.muted = true; v.playsInline = true; v.loop = !!loop; v.preload = 'auto';
     v.style.visibility = 'hidden';
-    v.src = '/assets/ui/mascot/mascot-' + name + '.webm';
+    v.src = src || ('/assets/ui/mascot/mascot-' + name + '.webm');
     // новое видео подменяет прежнее, только когда реально пошло: без мигания между анимациями
     v.addEventListener('playing', function () {
       v.style.visibility = 'visible';

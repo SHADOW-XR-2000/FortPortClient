@@ -39,7 +39,7 @@ import kotlin.math.hypot
  *
  * Сами анимации — прозрачные WebM (VP9 с альфа-каналом). Android-проигрыватели альфа-канал не показывают
  * (будет чёрный фон), его умеет только Chromium, поэтому маскот рисуется в маленьком прозрачном WebView
- * со страницей assets/ui/mascot/mascot.html. Тексты фраз — assets/ui/mascot/phrases.json (из mascot.js).
+ * со страницей assets/ui/mascot/mascot.html. Тексты фраз — assets/ui/mascot/skins/<скин>/phrases/*.json (из mascot.js; см. skins/README.md).
  */
 class MascotOverlay(
     private val activity: AppCompatActivity,
@@ -53,6 +53,9 @@ class MascotOverlay(
         private const val W_DP = 90
         private const val H_DP = 124
         private const val EDGE_DP = 72
+        private const val SKINS_DIR = "ui/mascot/skins"
+        private const val DEFAULT_SKIN = "Жека" // имя маскота по умолчанию (как в настройках)
+        private const val DEFAULT_SKIN_DIR = "$SKINS_DIR/default"
         private const val FORTPORT_COMMUNITY_ID = 1773926513828L
 
         /** Эмоции из фраз: /E0/ … /E7/ → имя видео mascot-<имя>.webm. */
@@ -144,6 +147,7 @@ class MascotOverlay(
     private var newsIds: List<Long> = emptyList()
     private var lastNewsFetch = 0L
     private var phrases: Map<String, List<String>> = emptyMap()
+    private var loadedSkin = ""
 
     // состояние «страницы» (как перезагрузка страницы на сайте)
     private var kind: String? = null
@@ -175,6 +179,7 @@ class MascotOverlay(
     init {
         val loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(activity))
+            .addPathHandler("/skins/", WebViewAssetLoader.InternalStoragePathHandler(activity, MascotSkins.root(activity).apply { mkdirs() }))
             .build()
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -214,19 +219,46 @@ class MascotOverlay(
         bg.execute { loadPhrases() }
     }
 
+    /**
+     * Реплики лежат по одному файлу на категорию: assets/ui/mascot/skins/<скин>/phrases/<категория>.json
+     * (массив строк, одна реплика на строку; см. skins/README.md). Сначала грузится скин default, затем поверх —
+     * выбранный скин: встроенный (assets) или установленный пользователем (files/mascots/<название>/phrases).
+     * Категории, которых нет в скине, остаются из default.
+     */
     private fun loadPhrases() {
-        try {
-            val text = activity.assets.open("ui/mascot/phrases.json").bufferedReader().use { it.readText() }
-            val o = JSONObject(text)
-            val m = HashMap<String, List<String>>()
-            for (k in o.keys()) {
-                val a = o.getJSONArray(k)
-                m[k] = List(a.length()) { a.getString(it) }
-            }
-            phrases = m
-        } catch (e: Exception) {
-            android.util.Log.w("Mascot", "phrases.json", e)
+        val skin = settingsPrefs.getString("mascot_selected", DEFAULT_SKIN) ?: DEFAULT_SKIN
+        val m = HashMap<String, List<String>>()
+        readAssetSkin(DEFAULT_SKIN_DIR, m)
+        if (skin != DEFAULT_SKIN) {
+            readAssetSkin("$SKINS_DIR/$skin", m)
+            readFileSkin(java.io.File(MascotSkins.dir(activity, skin), "phrases"), m)
         }
+        phrases = m
+        loadedSkin = skin
+        curVideo = "" // у нового скина свои видео: следующая эмоция должна загрузиться заново
+    }
+
+    private fun readAssetSkin(dir: String, into: MutableMap<String, List<String>>) {
+        val files = try { activity.assets.list("$dir/phrases") } catch (e: Exception) { null } ?: return
+        for (f in files) {
+            if (!f.endsWith(".json")) continue
+            try {
+                val text = activity.assets.open("$dir/phrases/$f").bufferedReader().use { it.readText() }
+                into[f.removeSuffix(".json")] = parseList(text)
+            } catch (e: Exception) { android.util.Log.w("Mascot", "$dir/phrases/$f", e) }
+        }
+    }
+
+    private fun readFileSkin(dir: java.io.File, into: MutableMap<String, List<String>>) {
+        for (f in dir.listFiles { x -> x.isFile && x.name.endsWith(".json") } ?: return) {
+            try { into[f.name.removeSuffix(".json")] = parseList(f.readText()) }
+            catch (e: Exception) { android.util.Log.w("Mascot", f.path, e) }
+        }
+    }
+
+    private fun parseList(text: String): List<String> {
+        val a = org.json.JSONArray(text)
+        return List(a.length()) { a.getString(it) }
     }
 
     private fun list(key: String): List<String> = phrases[key] ?: emptyList()
@@ -243,7 +275,10 @@ class MascotOverlay(
             hide()
             return
         }
-        val key = "$k:$id:${sessionIdentity()}"
+        // смена скина в настройках — как новая страница: реплики и видео подхватятся
+        val skinNow = settingsPrefs.getString("mascot_selected", DEFAULT_SKIN) ?: DEFAULT_SKIN
+        if (skinNow != loadedSkin) bg.execute { loadPhrases() }
+        val key = "$k:$id:${sessionIdentity()}:$skinNow"
         if (key == pageKey && started) { box.visibility = View.VISIBLE; return }
         pageKey = key; kind = k; pageId = id; started = false
         val gen = ++generation
@@ -291,6 +326,7 @@ class MascotOverlay(
 
     /** Грузит данные; возвращает то, что относится к конкретной странице (статистика и название). */
     private fun gather(k: String, id: Long): Pair<JSONObject?, String> {
+        if ((settingsPrefs.getString("mascot_selected", DEFAULT_SKIN) ?: DEFAULT_SKIN) != loadedSkin) loadPhrases()
         val sk = sessionIdentity()
         if (sk != sessionKey) {
             // Сменился аккаунт (например, выход из тестового режима): забываем ник и данные прошлой сессии,
@@ -635,7 +671,8 @@ class MascotOverlay(
     private fun playVideo(name: String, loop: Boolean) {
         curVideo = name
         if (!pageReady) return
-        web.evaluateJavascript("play('$name',$loop)", null)
+        val src = MascotSkins.videoPath(activity, loadedSkin, name)
+        web.evaluateJavascript("play('$name',$loop,${JSONObject.quote(src ?: "")})", null)
     }
 
     private fun applyPoseJs() {
