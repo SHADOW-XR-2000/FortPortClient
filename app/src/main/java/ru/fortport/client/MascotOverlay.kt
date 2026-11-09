@@ -39,7 +39,7 @@ import kotlin.math.hypot
  *
  * Сами анимации — прозрачные WebM (VP9 с альфа-каналом). Android-проигрыватели альфа-канал не показывают
  * (будет чёрный фон), его умеет только Chromium, поэтому маскот рисуется в маленьком прозрачном WebView
- * со страницей assets/ui/mascot/mascot.html. Тексты фраз — assets/ui/mascot/skins/<скин>/phrases/*.json (из mascot.js; см. skins/README.md).
+ * со страницей assets/ui/mascot/mascot.html. Тексты фраз — assets/ui/mascot/skins/<скин>/phrases/<категория>.json (из mascot.js; см. skins/README.md).
  */
 class MascotOverlay(
     private val activity: AppCompatActivity,
