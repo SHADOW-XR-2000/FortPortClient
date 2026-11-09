@@ -97,7 +97,7 @@ object MascotSkins {
 
     /**
      * Распаковывает только нужное и только по фиксированным путям (zip-slip невозможен: из имени записи берётся
-     * лишь последний компонент): skin.json, phrases/*.json, video/mascot-*.webm.
+     * лишь последний компонент): skin.json, phrases/<категория>.json, video/mascot-*.webm.
      */
     private fun extract(input: InputStream, out: File) {
         out.mkdirs()
