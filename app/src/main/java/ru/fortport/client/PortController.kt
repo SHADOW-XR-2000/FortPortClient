@@ -125,6 +125,9 @@ class PortController(
         return true
     }
 
+    /** Данные порта изменились (настройки сохранены): при следующем открытии лента и шапка читаются заново. */
+    fun forget() { targetSet = false }
+
     fun start(userId: String, deviceId: String, userAgent: String) {
         api.setSession(userId, deviceId, userAgent)
         if (started) return
