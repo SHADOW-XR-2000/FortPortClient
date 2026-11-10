@@ -407,16 +407,24 @@ class SettingsController(
                 if (activity.isFinishing || activity.isDestroyed) return@pickZip
                 toast("Импорт…", true)
                 Thread {
-                    val result: Pair<String?, String?> = try { MascotSkins.install(activity, uri) to null }
+                    val result: Pair<MascotSkins.Result?, String?> = try { MascotSkins.install(activity, uri) to null }
                     catch (e: MascotSkins.SkinException) { null to (e.message ?: "Неверный архив") }
                     catch (e: Exception) { Log.w(TAG, "mascot import", e); null to "Не удалось прочитать архив (нужен .zip)" }
                     activity.runOnUiThread {
                         if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
-                        val (name, err) = result
-                        if (name != null) {
-                            prefs.edit().putString("mascot_selected", name).apply() // сразу выбираем импортированного
-                            toast("Маскот «$name» импортирован и выбран", true)
+                        val (res, err) = result
+                        if (res != null) {
+                            prefs.edit().putString("mascot_selected", res.name).apply() // сразу выбираем импортированного
+                            val info = "«${res.name}»: фраз-категорий ${res.categories.size}, видео ${res.videos}" +
+                                if (res.unknown.isNotEmpty()) ". Не распознаны: ${res.unknown.joinToString()}" else ""
+                            toast(info, res.unknown.isEmpty() && (res.categories.isNotEmpty() || res.videos > 0))
                             rerenderKeepScroll()
+                            if (res.skipped.isNotEmpty() || (res.categories.isEmpty() && res.unknown.isEmpty())) {
+                                val msg = StringBuilder()
+                                if (res.categories.isEmpty() && res.unknown.isEmpty()) msg.append("Файлы фраз не найдены: они должны лежать в папке phrases/ (например phrases/random.json).\n\n")
+                                if (res.skipped.isNotEmpty()) msg.append("Пропущены (не на своём месте или неизвестное имя):\n").append(res.skipped.take(12).joinToString("\n"))
+                                AlertDialog.Builder(activity).setTitle("Проверьте архив").setMessage(msg.toString().trim()).setPositiveButton("Понятно", null).show()
+                            }
                         } else toast(err ?: "Ошибка импорта", false)
                     }
                 }.start()

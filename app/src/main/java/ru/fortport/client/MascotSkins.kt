@@ -31,6 +31,31 @@ object MascotSkins {
 
     class SkinException(message: String) : Exception(message)
 
+    /** Итог импорта: что реально попало в скин (чтобы было видно, если что-то не распознано). */
+    class Result(
+        val name: String, val categories: List<String>, val unknown: List<String>, val videos: Int,
+        /** Файлы архива, не попавшие в скин: .json вне phrases/ и webm с неизвестным именем. */
+        val skipped: List<String> = emptyList()
+    )
+
+    private const val PREFS = "settings_ui"
+    private const val REV_KEY = "mascot_skin_rev"
+
+    /** Счётчик установок: меняется при каждом импорте, чтобы маскот перечитал реплики даже у скина с тем же названием. */
+    fun revision(ctx: Context): Int = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(REV_KEY, 0)
+
+    private fun bumpRevision(ctx: Context) {
+        val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        p.edit().putInt(REV_KEY, p.getInt(REV_KEY, 0) + 1).apply()
+    }
+
+    /** Категории, которые приложение действительно использует. Остальные файлы фраз игнорируются. */
+    val KNOWN_CATEGORIES = setOf(
+        "greetings", "poke", "random", "own_profile", "profile", "port", "fortport",
+        "hh_feed", "hh_communities", "hh_community", "hh_community_settings", "hh_profile",
+        "hh_own_profile", "hh_settings", "hh_new_community", "hh_whatis_port"
+    )
+
     fun root(ctx: Context) = File(ctx.filesDir, "mascots")
 
     /** Папка скина: имя очищается от символов, недопустимых в путях. */
@@ -46,7 +71,12 @@ object MascotSkins {
 
     private fun readMeta(dir: File): JSONObject? = try { JSONObject(File(dir, "skin.json").readText()) } catch (e: Exception) { null }
 
-    fun delete(ctx: Context, name: String): Boolean = name != DEFAULT && dir(ctx, name).deleteRecursively()
+    fun delete(ctx: Context, name: String): Boolean {
+        if (name == DEFAULT) return false
+        val ok = dir(ctx, name).deleteRecursively()
+        bumpRevision(ctx)
+        return ok
+    }
 
     /** Путь видео скина для WebView (/skins/…), либо null — играть стандартное из assets. */
     fun videoPath(ctx: Context, skin: String, video: String): String? {
@@ -57,12 +87,13 @@ object MascotSkins {
     }
 
     /** Устанавливает скин из zip; возвращает его название. При ошибке бросает [SkinException] с понятным текстом. */
-    fun install(ctx: Context, uri: Uri): String {
+    fun install(ctx: Context, uri: Uri): Result {
         val rootDir = root(ctx).apply { mkdirs() }
         val tmp = File(rootDir, ".tmp_${System.currentTimeMillis()}")
         try {
             val input = ctx.contentResolver.openInputStream(uri) ?: throw SkinException("Не удалось открыть файл")
-            input.use { extract(it, tmp) }
+            val skipped = ArrayList<String>()
+            input.use { extract(it, tmp, skipped) }
             val meta = try { JSONObject(File(tmp, "skin.json").readText()) } catch (e: Exception) {
                 throw SkinException("В архиве нет корректного skin.json")
             }
@@ -74,13 +105,15 @@ object MascotSkins {
             }
             val phrases = File(tmp, "phrases").listFiles()?.toList().orEmpty()
             val videos = File(tmp, "video").listFiles()?.toList().orEmpty()
-            if (phrases.isEmpty() && videos.isEmpty()) throw SkinException("В архиве нет ни фраз (phrases/), ни видео (video/)")
+            if (phrases.isEmpty() && videos.isEmpty()) throw SkinException("В архиве нет ни фраз (папка phrases/), ни видео (папка video/)")
             for (f in phrases) validatePhrases(f)
             File(tmp, "skin.json").writeText(JSONObject().put("name", name).put("author", meta.optString("author")).toString(2))
             val target = File(rootDir, safe(name))
             if (target.exists() && !target.deleteRecursively()) throw SkinException("Не удалось заменить прежнюю версию")
             if (!tmp.renameTo(target)) throw SkinException("Не удалось сохранить маскота")
-            return name
+            val cats = phrases.map { it.name.removeSuffix(".json") }.sorted()
+            bumpRevision(ctx)
+            return Result(name, cats.filter { it in KNOWN_CATEGORIES }, cats.filter { it !in KNOWN_CATEGORIES }, videos.size, skipped)
         } finally {
             tmp.deleteRecursively()
         }
@@ -99,7 +132,7 @@ object MascotSkins {
      * Распаковывает только нужное и только по фиксированным путям (zip-slip невозможен: из имени записи берётся
      * лишь последний компонент): skin.json, phrases/<категория>.json, video/mascot-*.webm.
      */
-    private fun extract(input: InputStream, out: File) {
+    private fun extract(input: InputStream, out: File, skipped: MutableList<String>) {
         out.mkdirs()
         var total = 0L
         var entries = 0
@@ -127,10 +160,14 @@ object MascotSkins {
                     }
                     base.endsWith(".webm", true) -> {
                         val n = base.substring(0, base.length - 5).lowercase().removePrefix("mascot-")
-                        if (n !in VIDEOS) continue
+                        if (n !in VIDEOS) { skipped.add(e.name); continue }
                         dest = File(out, "video/mascot-$n.webm"); limit = MAX_VIDEO
                     }
-                    else -> continue
+                    else -> {
+                        // .json вне phrases/ — частая ошибка в структуре архива: сообщаем, а не молчим
+                        if (base.endsWith(".json", true)) skipped.add(e.name)
+                        continue
+                    }
                 }
                 dest.parentFile?.mkdirs()
                 dest.outputStream().use { o ->
