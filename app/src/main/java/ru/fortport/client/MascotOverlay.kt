@@ -146,8 +146,9 @@ class MascotOverlay(
     private var newsLines: List<String> = emptyList()
     private var newsIds: List<Long> = emptyList()
     private var lastNewsFetch = 0L
-    private var phrases: Map<String, List<String>> = emptyMap()
+    @Volatile private var phrases: Map<String, List<String>> = emptyMap()
     private var loadedSkin = ""
+    private var loadedKey = ""
 
     // состояние «страницы» (как перезагрузка страницы на сайте)
     private var kind: String? = null
@@ -225,8 +226,12 @@ class MascotOverlay(
      * выбранный скин: встроенный (assets) или установленный пользователем (files/mascots/<название>/phrases).
      * Категории, которых нет в скине, остаются из default.
      */
+    /** Выбранный скин + номер установки: повторный импорт того же названия тоже считается сменой. */
+    private fun skinKey() = (settingsPrefs.getString("mascot_selected", DEFAULT_SKIN) ?: DEFAULT_SKIN) + "#" + MascotSkins.revision(activity)
+
     private fun loadPhrases() {
         val skin = settingsPrefs.getString("mascot_selected", DEFAULT_SKIN) ?: DEFAULT_SKIN
+        val keyAtLoad = skinKey()
         val m = HashMap<String, List<String>>()
         readAssetSkin(DEFAULT_SKIN_DIR, m)
         if (skin != DEFAULT_SKIN) {
@@ -235,6 +240,7 @@ class MascotOverlay(
         }
         phrases = m
         loadedSkin = skin
+        loadedKey = keyAtLoad
         curVideo = "" // у нового скина свои видео: следующая эмоция должна загрузиться заново
     }
 
@@ -276,9 +282,9 @@ class MascotOverlay(
             return
         }
         // смена скина в настройках — как новая страница: реплики и видео подхватятся
-        val skinNow = settingsPrefs.getString("mascot_selected", DEFAULT_SKIN) ?: DEFAULT_SKIN
-        if (skinNow != loadedSkin) bg.execute { loadPhrases() }
-        val key = "$k:$id:${sessionIdentity()}:$skinNow"
+        val skinKeyNow = skinKey()
+        if (skinKeyNow != loadedKey) bg.execute { loadPhrases() }
+        val key = "$k:$id:${sessionIdentity()}:$skinKeyNow"
         if (key == pageKey && started) { box.visibility = View.VISIBLE; return }
         pageKey = key; kind = k; pageId = id; started = false
         val gen = ++generation
@@ -326,7 +332,7 @@ class MascotOverlay(
 
     /** Грузит данные; возвращает то, что относится к конкретной странице (статистика и название). */
     private fun gather(k: String, id: Long): Pair<JSONObject?, String> {
-        if ((settingsPrefs.getString("mascot_selected", DEFAULT_SKIN) ?: DEFAULT_SKIN) != loadedSkin) loadPhrases()
+        if (skinKey() != loadedKey) loadPhrases()
         val sk = sessionIdentity()
         if (sk != sessionKey) {
             // Сменился аккаунт (например, выход из тестового режима): забываем ник и данные прошлой сессии,
