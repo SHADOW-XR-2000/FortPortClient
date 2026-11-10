@@ -262,6 +262,25 @@ class DemoBackend(context: Context) {
         return o
     }
 
+    private fun canManagePort(c: JSONObject) = c.optLong("owner") == ME || ids(c.getJSONArray("moderators")).contains(ME)
+
+    /** Ответ GET /api/community/{id}/settings: участники — объекты, время — unix-секунды. */
+    private fun portSettingsView(c: JSONObject): JSONObject {
+        fun member(id: Long) = obj(
+            "id" to id, "username" to (findUser(id)?.optString("username") ?: "Удалён"),
+            "profile_picture" to (findUser(id)?.optString("profilePicture") ?: ""),
+            "isOwner" to false, "isDeveloper" to false, "isModerator" to false
+        )
+        fun members(a: JSONArray) = JSONArray().also { out -> ids(a).forEach { out.put(member(it)) } }
+        return obj(
+            "id" to c.optLong("id"), "username" to c.optString("username"), "type" to c.optString("type"),
+            "created_at" to System.currentTimeMillis() / 1000, "profile_picture" to c.optString("profilePicture"),
+            "description" to c.optString("description"), "rules" to c.optString("rules"), "status" to c.optString("status"),
+            "owner_id" to c.optLong("owner"), "profile_background" to c.opt("profileBackground"),
+            "moderators" to members(c.getJSONArray("moderators")), "subscribers" to members(c.getJSONArray("subscribers"))
+        )
+    }
+
     private fun communityView(c: JSONObject) = JSONObject(c.toString()).also {
         it.put("subscriberCount", c.getJSONArray("subscribers").length()); it.put("subCount", c.getJSONArray("subscribers").length())
     }
@@ -384,6 +403,44 @@ class DemoBackend(context: Context) {
         if (p == "/api/communities/search") {
             val s = q["q"].orEmpty().lowercase(Locale.ROOT)
             return ok(comms { c -> c.optString("username").lowercase(Locale.ROOT).contains(s) })
+        }
+        // --- настройка порта (страницы создания/настройки; формы тел совпадают с PortSettingsController)
+        m("/api/community/(\\d+)/settings")?.let { g ->
+            val c = community(g[1].toLong()) ?: return fail(404, "Порт не найден")
+            if (!canManagePort(c)) return fail(403, "Нет прав на настройку порта")
+            return ok(portSettingsView(c))
+        }
+        if (method == "DELETE") m("/api/communities/(\\d+)")?.let { g ->
+            val c = community(g[1].toLong()) ?: return fail(404, "Порт не найден")
+            if (c.optLong("owner") != ME) return fail(403, "Удалить порт может только владелец")
+            val a = db.getJSONArray("communities")
+            for (i in 0 until a.length()) if (a.getJSONObject(i).optLong("id") == c.optLong("id")) { a.remove(i); break }
+            return success()
+        }
+        m("/api/community/(\\d+)/moderators")?.let { g ->
+            val c = community(g[1].toLong()) ?: return fail(404, "Порт не найден")
+            if (c.optLong("owner") != ME) return fail(403, "Назначать модераторов может только владелец")
+            val uid = body.optLong("userId", 0L)
+            if (findUser(uid) == null) return fail(404, "Пользователь не найден")
+            val mods = ids(c.getJSONArray("moderators")); if (!mods.contains(uid)) mods.add(uid)
+            c.put("moderators", toArr(mods)); return success()
+        }
+        m("/api/community/(\\d+)/moderators/(\\d+)")?.let { g ->
+            val c = community(g[1].toLong()) ?: return fail(404, "Порт не найден")
+            if (c.optLong("owner") != ME) return fail(403, "Снимать модераторов может только владелец")
+            val uid = g[2].toLong()
+            if (uid == c.optLong("owner")) return fail(400, "Хозяина порта нельзя снять")
+            val mods = ids(c.getJSONArray("moderators")); mods.remove(uid)
+            c.put("moderators", toArr(mods)); return success()
+        }
+        m("/api/community/(\\d+)/subscribers/(\\d+)")?.let { g ->
+            val c = community(g[1].toLong()) ?: return fail(404, "Порт не найден")
+            if (!canManagePort(c)) return fail(403, "Нет прав")
+            val uid = g[2].toLong()
+            if (uid == c.optLong("owner")) return fail(400, "Хозяина порта нельзя удалить")
+            val subs = ids(c.getJSONArray("subscribers")); subs.remove(uid)
+            val mods = ids(c.getJSONArray("moderators")); mods.remove(uid)
+            c.put("subscribers", toArr(subs)); c.put("moderators", toArr(mods)); return success()
         }
         m("/api/communities/(\\d+)")?.let { g -> return community(g[1].toLong())?.let { ok(communityView(it)) } ?: fail(404, "Порт не найден") }
         m("/api/communities/(\\d+)/(join|leave)")?.let { g ->
@@ -540,6 +597,29 @@ class DemoBackend(context: Context) {
                 c.put("createdMs", System.currentTimeMillis())
                 post.getJSONArray("comments").put(c)
                 ok(obj("success" to true, "id" to c.optLong("id")))
+            }
+            p == "/api/communities" && method == "POST" -> {
+                val name = f["username"].orEmpty().trim()
+                if (name.isEmpty()) return fail(400, "Введите название порта")
+                val id = nextId()
+                db.getJSONArray("communities").put(obj(
+                    "id" to id, "username" to name, "profilePicture" to "", "type" to (f["type"] ?: "community"), "status" to "",
+                    "description" to f["description"].orEmpty(), "rules" to f["rules"].orEmpty(), "owner" to ME,
+                    "moderators" to arr(ME), "subscribers" to arr(ME), "createdAt" to iso(System.currentTimeMillis()), "profileBackground" to null
+                ))
+                ok(obj("success" to true, "id" to id))
+            }
+            Regex("/api/community/(\\d+)/settings").matches(p) && method == "PUT" -> {
+                val c = community(Regex("/api/community/(\\d+)/settings").matchEntire(p)!!.groupValues[1].toLong()) ?: return fail(404, "Порт не найден")
+                if (!canManagePort(c)) return fail(403, "Нет прав на настройку порта")
+                val name = f["username"].orEmpty().trim()
+                if (name.isEmpty()) return fail(400, "Введите название порта")
+                c.put("username", name)
+                f["type"]?.let { c.put("type", it) }
+                f["status"]?.let { c.put("status", it) }
+                f["description"]?.let { c.put("description", it) }
+                f["rules"]?.let { c.put("rules", it) }
+                success() // файлы (аватар/фон) принимаем, но не сохраняем
             }
             p.startsWith("/api/users/") -> success() // загрузка аватара/фона: принимаем, файл не сохраняем
             else -> fail(404, "Тестовый режим: $method $p не реализовано")
