@@ -262,6 +262,19 @@ class DemoBackend(context: Context) {
         return o
     }
 
+    /** Текстовые страницы сайта (/support, /about, /privacy, /terms) для тестового режима — той же разметкой, что и на сайте. */
+    private fun infoPageHtml(path: String): String? {
+        val title = when (path) {
+            "/support" -> "Поддержка"; "/about" -> "О нас"; "/privacy" -> "Политика конфиденциальности"; "/terms" -> "Пользовательское соглашение"
+            else -> return null
+        }
+        return "<html><body><div id=\"utility-bar\"><a href=\"/\">Домой</a></div><img src=\"/logo.png\"><h1>$title</h1>" +
+            "<p><b>Тестовый режим:</b> это пример текста страницы, настоящий берётся с сайта.</p><hr>" +
+            "<h2>1. Раздел</h2><p>1.1 Абзац с <a href=\"mailto:test@example.com\">ссылкой</a>.</p>" +
+            "<h3>Подраздел:</h3><ul><li>Первый пункт</li><li>Второй пункт</li></ul><hr><p>Контакты: <a href=\"tel:+70000000000\">+7 000 000-00-00</a></p>" +
+            "<footer>Подвал</footer></body></html>"
+    }
+
     private fun canManagePort(c: JSONObject) = c.optLong("owner") == ME || ids(c.getJSONArray("moderators")).contains(ME)
 
     /** Ответ GET /api/community/{id}/settings: участники — объекты, время — unix-секунды. */
@@ -311,6 +324,7 @@ class DemoBackend(context: Context) {
         fun m(re: String) = Regex(re).matchEntire(p)?.groupValues
         val write = method == "PUT" || method == "POST" || method == "PATCH"
 
+        infoPageHtml(p)?.let { if (method == "GET") return SiteApi.Resp(200, it) }
         if (p == "/api/session/bootstrap") return ok(obj(
             "authenticated" to true, "user" to meJson(),
             "mascot" to obj("bricked" to 0, "handHolding" to true, "pettingRecord" to 0), "announcements" to JSONArray()

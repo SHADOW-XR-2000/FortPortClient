@@ -68,6 +68,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var nativePortSettingsPanel: View
     private lateinit var portSettingsTopBar: View
     private lateinit var portSettingsController: PortSettingsController
+    private lateinit var nativeInfoPanel: View
+    private lateinit var infoTopBar: View
+    private lateinit var infoController: InfoPageController
     private lateinit var mascot: MascotOverlay
     private lateinit var notifBottomBar: View
     private lateinit var postTopBar: View
@@ -84,7 +87,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loginController: LoginController
 
     /** Нативные экраны, которые показываются поверх WebView вместо веб-страниц /chats и /friends. */
-    private enum class NativeSection { CHATS, FRIENDS, COMMUNITIES, MUSIC, FEED, POST, PROFILE, PORT, NOTIFS, SETTINGS, PORT_SETTINGS }
+    private enum class NativeSection { CHATS, FRIENDS, COMMUNITIES, MUSIC, FEED, POST, PROFILE, PORT, NOTIFS, SETTINGS, PORT_SETTINGS, INFO_PAGE }
     private var nativeSection: NativeSection? = null
     /** Чья музыка откроется в нативной вкладке: null — своя (выставляется при перехвате /music?id=…). */
     private var pendingMusicUserId: String? = null
@@ -108,6 +111,8 @@ class MainActivity : AppCompatActivity() {
     private var pendingCommunityId = 0L
     /** Какой порт настраивает нативная страница PORT_SETTINGS (0 — создание нового порта). */
     private var pendingPortEditId = 0L
+    /** Какая текстовая страница открыта на INFO_PAGE (/support, /about, /privacy, /terms). */
+    private var pendingInfoPath = "/terms"
     private var returnPortId = 0L
     /** Чьи друзья/порты показать в нативных списках: null — свои. */
     private var pendingFriendsUserId: String? = null
@@ -199,13 +204,15 @@ class MainActivity : AppCompatActivity() {
         settingsTopBar = findViewById(R.id.settingsTopBar)
         nativePortSettingsPanel = findViewById(R.id.nativePortSettingsPanel)
         portSettingsTopBar = findViewById(R.id.portSettingsTopBar)
+        nativeInfoPanel = findViewById(R.id.nativeInfoPanel)
+        infoTopBar = findViewById(R.id.infoTopBar)
         notifBottomBar = findViewById(R.id.notifBottomBar)
         postTopBar = findViewById(R.id.postTopBar)
         sectionHeaderAction = findViewById(R.id.sectionHeaderAction)
         // Верхние и нижние панели рисуются в стиле Windows 7 Aero (AeroBar, по dock-panel.html): стеклянный градиент,
         // светлая и тёмная темы. Касается основных панелей, шапок разделов, поста, настроек и панели уведомлений.
         // Шаблоны постов не трогаем (UiUtil.royal).
-        listOf(topNavBar to false, sectionHeader to false, postTopBar to false, settingsTopBar to false, portSettingsTopBar to false,
+        listOf(topNavBar to false, sectionHeader to false, postTopBar to false, settingsTopBar to false, portSettingsTopBar to false, infoTopBar to false,
             bottomNavBar to true, notifBottomBar to true).forEach { (bar, atBottom) ->
             bar.background = AeroBar.skin(this, atBottom)
             AeroBar.adaptTexts(bar)
@@ -226,6 +233,7 @@ class MainActivity : AppCompatActivity() {
         siteApi.attachBackground(findViewById(R.id.nativeNotifsBg), defaultBg)
         siteApi.attachBackground(findViewById(R.id.nativeSettingsBg), defaultBg)
         siteApi.attachBackground(findViewById(R.id.nativePortSettingsBg), defaultBg)
+        siteApi.attachBackground(findViewById(R.id.nativeInfoBg), defaultBg)
         val openChat: (String) -> Unit = { json ->
             startActivity(Intent(this, ChatActivity::class.java).putExtra(ChatActivity.EXTRA_PAYLOAD, json))
         }
@@ -420,6 +428,7 @@ class MainActivity : AppCompatActivity() {
             pickZip = { done -> commentPickCb = done; commentPicker.launch("*/*") },
             onAuthLost = authLost
         )
+        infoController = InfoPageController(this, siteApi, findViewById(R.id.infoHost))
         portSettingsController = PortSettingsController(
             activity = this,
             api = siteApi,
@@ -451,7 +460,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.postBackButton).setOnClickListener { onBackPressed() }
         findViewById<View>(R.id.settingsBackButton).setOnClickListener { onBackPressed() }
         findViewById<View>(R.id.portSettingsBackButton).setOnClickListener { onBackPressed() }
-        listOf(R.id.postBackButton, R.id.settingsBackButton, R.id.portSettingsBackButton).forEach { id ->
+        findViewById<View>(R.id.infoBackButton).setOnClickListener { onBackPressed() }
+        listOf(R.id.postBackButton, R.id.settingsBackButton, R.id.portSettingsBackButton, R.id.infoBackButton).forEach { id ->
             findViewById<TextView>(id)?.let { AeroButton.style(it) }
         }
         installBarAutoHide(findViewById(R.id.rootLayout))
@@ -913,7 +923,37 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Страница сайта (поддержка, о нас, конфиденциальность, условия) в WebView; «Назад» вернёт на нативный экран. */
+    private val INFO_PATHS = setOf("/support", "/about", "/privacy", "/terms")
+
+    /** Нативные текстовые страницы (меню пользователя, ссылки сайта). */
+    private fun openInfoPage(path: String) {
+        if (nativeSection == NativeSection.INFO_PAGE) {
+            pendingInfoPath = path
+            infoController.setPage(path)
+            applyInfoHeader(path)
+            infoController.start(siteApi.userId, siteApi.deviceId, siteApi.userAgent)
+            return
+        }
+        if (nativeSection == null) navFrames.clear()
+        pushNavFrame()
+        pendingInfoPath = path
+        showNativeSection(NativeSection.INFO_PAGE)
+    }
+
+    /** Название и иконка верхней панели текстовой страницы. */
+    private fun applyInfoHeader(path: String) {
+        val (title, icon) = when (path) {
+            "/support" -> "Поддержка" to "ui/icons/support_icon.png"
+            "/about" -> "О нас" to "ui/icons/info.png"
+            "/privacy" -> "Конфиденциальность" to "ui/icons/confidence.png"
+            else -> "Условия" to "ui/icons/terms.png"
+        }
+        findViewById<TextView>(R.id.infoTitle).text = title
+        try { findViewById<ImageView>(R.id.infoTopIcon).setImageBitmap(loadAssetIcon(icon)) } catch (e: Exception) { Log.w(TAG, "icon $icon", e) }
+    }
+
     private fun openSitePage(path: String) {
+        if (path in INFO_PATHS) { openInfoPage(path); return }
         if (siteApi.isDemo) {
             Toast.makeText(this, "Недоступно в тестовом режиме", Toast.LENGTH_SHORT).show()
             return
@@ -994,7 +1034,7 @@ class MainActivity : AppCompatActivity() {
         NativeSection.COMMUNITIES -> communitiesChrome
         NativeSection.MUSIC -> musicChrome
         NativeSection.NOTIFS -> notifsChrome
-        NativeSection.FEED, NativeSection.POST, NativeSection.PROFILE, NativeSection.PORT, NativeSection.SETTINGS, NativeSection.PORT_SETTINGS, null -> null // у ленты обычные панели, у поста — стрелка назад
+        NativeSection.FEED, NativeSection.POST, NativeSection.PROFILE, NativeSection.PORT, NativeSection.SETTINGS, NativeSection.PORT_SETTINGS, NativeSection.INFO_PAGE, null -> null // у ленты обычные панели, у поста — стрелка назад
     }
 
     /** Показывает либо обычную верхнюю панель, либо шапку раздела, либо ничего. */
@@ -1005,6 +1045,7 @@ class MainActivity : AppCompatActivity() {
         val inPost = barsVisible && nativeSection == NativeSection.POST
         val inSettings = barsVisible && nativeSection == NativeSection.SETTINGS
         val inPortSettings = barsVisible && nativeSection == NativeSection.PORT_SETTINGS
+        val inInfo = barsVisible && nativeSection == NativeSection.INFO_PAGE
         if (section != null) {
             sectionHeaderIcon.setImageBitmap(loadAssetIcon(section.iconAsset))
             sectionHeaderTitle.setText(section.titleRes)
@@ -1017,11 +1058,12 @@ class MainActivity : AppCompatActivity() {
         topNavBar.visibility = View.GONE // верхней royal-панели больше нет: меню и уведомления — в нижней панели
         settingsTopBar.visibility = if (inSettings) View.VISIBLE else View.GONE
         portSettingsTopBar.visibility = if (inPortSettings) View.VISIBLE else View.GONE
+        infoTopBar.visibility = if (inInfo) View.VISIBLE else View.GONE
         postTopBar.visibility = if (inPost) View.VISIBLE else View.GONE
         // Открытый пост: нижней панели нет, она возвращается после выхода из поста.
         val inNotifs = barsVisible && nativeSection == NativeSection.NOTIFS
         notifBottomBar.visibility = if (inNotifs) View.VISIBLE else View.GONE
-        if (paymentWebView == null && barsVisible) bottomNavBar.visibility = if (inPost || inNotifs || inSettings || inPortSettings) View.GONE else View.VISIBLE
+        if (paymentWebView == null && barsVisible) bottomNavBar.visibility = if (inPost || inNotifs || inSettings || inPortSettings || inInfo) View.GONE else View.VISIBLE
         // Загрузка с устройства — только в своей библиотеке.
         sectionHeaderAction.visibility =
             if (section != null && nativeSection == NativeSection.MUSIC && musicController.isOwnLibrary) View.VISIBLE else View.GONE
@@ -1128,7 +1170,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (section != NativeSection.POST && section != NativeSection.PROFILE && section != NativeSection.MUSIC &&
-            section != NativeSection.FRIENDS && section != NativeSection.COMMUNITIES && section != NativeSection.PORT && section != NativeSection.NOTIFS && section != NativeSection.SETTINGS && section != NativeSection.PORT_SETTINGS) navFrames.clear()
+            section != NativeSection.FRIENDS && section != NativeSection.COMMUNITIES && section != NativeSection.PORT && section != NativeSection.NOTIFS && section != NativeSection.SETTINGS && section != NativeSection.PORT_SETTINGS && section != NativeSection.INFO_PAGE) navFrames.clear()
         if (section == NativeSection.FRIENDS) {
             val changed = friendsController.setViewedUser(pendingFriendsUserId)
             applyListViewMode()
@@ -1148,6 +1190,7 @@ class MainActivity : AppCompatActivity() {
             if (nativeSection == NativeSection.PORT) { portController.stop(); startNativeLoading(); updateMascot(section); return }
         }
         if (section == NativeSection.PORT_SETTINGS) portSettingsController.setPort(pendingPortEditId)
+        if (section == NativeSection.INFO_PAGE) { infoController.setPage(pendingInfoPath); applyInfoHeader(pendingInfoPath) }
         if (section == NativeSection.PROFILE) {
             profileController.setUser(pendingProfileId)
             if (nativeSection == NativeSection.PROFILE) { profileController.stop(); startNativeLoading(); updateMascot(section); return }
@@ -1168,6 +1211,7 @@ class MainActivity : AppCompatActivity() {
         nativeNotifsPanel.visibility = if (section == NativeSection.NOTIFS) View.VISIBLE else View.GONE
         nativeSettingsPanel.visibility = if (section == NativeSection.SETTINGS) View.VISIBLE else View.GONE
         nativePortSettingsPanel.visibility = if (section == NativeSection.PORT_SETTINGS) View.VISIBLE else View.GONE
+        nativeInfoPanel.visibility = if (section == NativeSection.INFO_PAGE) View.VISIBLE else View.GONE
         updateAddPostButton(currentUrl)
         showBottomNav()
         startNativeLoading()
@@ -1301,6 +1345,7 @@ class MainActivity : AppCompatActivity() {
             NativeSection.NOTIFS -> notifsController.start(uid, did, ua)
             NativeSection.SETTINGS -> settingsController.start(uid, did, ua)
             NativeSection.PORT_SETTINGS -> portSettingsController.start(uid, did, ua)
+            NativeSection.INFO_PAGE -> infoController.start(uid, did, ua)
             null -> {}
         }
     }
@@ -1320,6 +1365,7 @@ class MainActivity : AppCompatActivity() {
         nativeNotifsPanel.visibility = View.GONE
         nativeSettingsPanel.visibility = View.GONE
         nativePortSettingsPanel.visibility = View.GONE
+        nativeInfoPanel.visibility = View.GONE
         updateMascot(null)
         stopNativeControllers()
         resetNativeSearch(was)
@@ -1338,6 +1384,7 @@ class MainActivity : AppCompatActivity() {
         notifsController.stop()
         settingsController.stop()
         portSettingsController.stop()
+        infoController.stop()
     }
 
     /** Строка поиска очищается при уходе с вкладки (как при новой загрузке страницы на сайте). */
@@ -1381,6 +1428,7 @@ class MainActivity : AppCompatActivity() {
             return NativeSection.PORT
         }
         if (path == "/settings") return NativeSection.SETTINGS
+        if (path in INFO_PATHS) { pendingInfoPath = path; return NativeSection.INFO_PAGE }
         if (path == "/new_community") { pendingPortEditId = 0L; return NativeSection.PORT_SETTINGS }
         if (path == "/community/settings") {
             val id = uri.getQueryParameter("id")?.toLongOrNull() ?: return null
@@ -2484,6 +2532,12 @@ class MainActivity : AppCompatActivity() {
             if (pathOf(webView.url) == "/community") handleHistoryBack()
             return
         }
+        if (nativeSection == NativeSection.INFO_PAGE) {
+            if (popNavFrame()) return
+            hideNativeSection()
+            if (pathOf(webView.url) in INFO_PATHS) handleHistoryBack()
+            return
+        }
         if (nativeSection == NativeSection.PORT_SETTINGS) {
             portSettingsController.discard()
             if (popNavFrame()) return
@@ -2621,6 +2675,7 @@ class MainActivity : AppCompatActivity() {
         notifsController.destroy()
         settingsController.destroy()
         portSettingsController.destroy()
+        infoController.destroy()
         mascot.destroy()
         siteApi.destroy()
         paymentWebView?.let { it.stopLoading(); it.destroy() }
