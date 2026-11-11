@@ -70,6 +70,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var portSettingsController: PortSettingsController
     private lateinit var nativeInfoPanel: View
     private lateinit var infoTopBar: View
+    private lateinit var feedTopBar: View
     private lateinit var infoController: InfoPageController
     private lateinit var mascot: MascotOverlay
     private lateinit var notifBottomBar: View
@@ -206,13 +207,14 @@ class MainActivity : AppCompatActivity() {
         portSettingsTopBar = findViewById(R.id.portSettingsTopBar)
         nativeInfoPanel = findViewById(R.id.nativeInfoPanel)
         infoTopBar = findViewById(R.id.infoTopBar)
+        feedTopBar = findViewById(R.id.feedTopBar)
         notifBottomBar = findViewById(R.id.notifBottomBar)
         postTopBar = findViewById(R.id.postTopBar)
         sectionHeaderAction = findViewById(R.id.sectionHeaderAction)
         // Верхние и нижние панели рисуются в стиле Windows 7 Aero (AeroBar, по dock-panel.html): стеклянный градиент,
         // светлая и тёмная темы. Касается основных панелей, шапок разделов, поста, настроек и панели уведомлений.
         // Шаблоны постов не трогаем (UiUtil.royal).
-        listOf(topNavBar to false, sectionHeader to false, postTopBar to false, settingsTopBar to false, portSettingsTopBar to false, infoTopBar to false,
+        listOf(topNavBar to false, sectionHeader to false, postTopBar to false, settingsTopBar to false, portSettingsTopBar to false, infoTopBar to false, feedTopBar to false,
             bottomNavBar to true, notifBottomBar to true).forEach { (bar, atBottom) ->
             bar.background = AeroBar.skin(this, atBottom)
             AeroBar.adaptTexts(bar)
@@ -461,7 +463,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.settingsBackButton).setOnClickListener { onBackPressed() }
         findViewById<View>(R.id.portSettingsBackButton).setOnClickListener { onBackPressed() }
         findViewById<View>(R.id.infoBackButton).setOnClickListener { onBackPressed() }
-        listOf(R.id.postBackButton, R.id.settingsBackButton, R.id.portSettingsBackButton, R.id.infoBackButton).forEach { id ->
+        findViewById<View>(R.id.feedSearchButton).setOnClickListener { feedController.showSearchStub() }
+        findViewById<View>(R.id.feedSettingsButton).setOnClickListener { feedController.showTabsDialog() }
+        listOf(R.id.postBackButton, R.id.settingsBackButton, R.id.portSettingsBackButton, R.id.infoBackButton, R.id.feedSearchButton, R.id.feedSettingsButton).forEach { id ->
             findViewById<TextView>(id)?.let { AeroButton.style(it) }
         }
         installBarAutoHide(findViewById(R.id.rootLayout))
@@ -1041,11 +1045,13 @@ class MainActivity : AppCompatActivity() {
     private fun applyTopChrome(barsVisible: Boolean) {
         // Смена экрана возвращает спрятанную при прокрутке нижнюю панель.
         bottomNavBar.animate().cancel(); bottomNavBar.translationY = 0f
+        feedTopBar.animate().cancel(); feedTopBar.translationY = 0f
         val section = if (barsVisible) activeSectionChrome() else null
         val inPost = barsVisible && nativeSection == NativeSection.POST
         val inSettings = barsVisible && nativeSection == NativeSection.SETTINGS
         val inPortSettings = barsVisible && nativeSection == NativeSection.PORT_SETTINGS
         val inInfo = barsVisible && nativeSection == NativeSection.INFO_PAGE
+        val inFeed = barsVisible && nativeSection == NativeSection.FEED
         if (section != null) {
             sectionHeaderIcon.setImageBitmap(loadAssetIcon(section.iconAsset))
             sectionHeaderTitle.setText(section.titleRes)
@@ -1059,6 +1065,7 @@ class MainActivity : AppCompatActivity() {
         settingsTopBar.visibility = if (inSettings) View.VISIBLE else View.GONE
         portSettingsTopBar.visibility = if (inPortSettings) View.VISIBLE else View.GONE
         infoTopBar.visibility = if (inInfo) View.VISIBLE else View.GONE
+        feedTopBar.visibility = if (inFeed) View.VISIBLE else View.GONE
         postTopBar.visibility = if (inPost) View.VISIBLE else View.GONE
         // Открытый пост: нижней панели нет, она возвращается после выхода из поста.
         val inNotifs = barsVisible && nativeSection == NativeSection.NOTIFS
@@ -2082,12 +2089,28 @@ class MainActivity : AppCompatActivity() {
         if (v is androidx.recyclerview.widget.RecyclerView) {
             v.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
                 override fun onScrolled(rv: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+                    // Верхняя панель ленты: вверху списка всегда на месте, дальше — как нижняя панель.
+                    if (rv.id == R.id.feedRecycler && feedTopBar.visibility == View.VISIBLE) {
+                        if (!rv.canScrollVertically(-1) || dy < -2) showFeedTopBar() else if (dy > 2) hideFeedTopBar()
+                    }
                     if (bottomNavBar.visibility != View.VISIBLE) return
                     if (dy > 2) hideBottomNav() else if (dy < -2) showBottomNav()
                 }
             })
         } else if (v is ViewGroup) {
             for (i in 0 until v.childCount) installBarAutoHide(v.getChildAt(i))
+        }
+    }
+
+    private fun hideFeedTopBar() {
+        if (feedTopBar.translationY == 0f) {
+            feedTopBar.animate().translationY(-feedTopBar.height.toFloat()).setDuration(200).start()
+        }
+    }
+
+    private fun showFeedTopBar() {
+        if (feedTopBar.translationY != 0f) {
+            feedTopBar.animate().translationY(0f).setDuration(200).start()
         }
     }
 
