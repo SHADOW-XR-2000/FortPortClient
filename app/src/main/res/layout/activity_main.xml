@@ -928,6 +928,48 @@
 
     </LinearLayout>
 
+    <!-- Верхняя aero-панель основной ленты: поиск (заглушка) и настройка ленты. Прячется при листании вниз, возвращается при листании вверх. -->
+    <LinearLayout
+        android:id="@+id/feedTopBar"
+        android:layout_width="0dp"
+        android:layout_height="70dp"
+        android:background="#262626"
+        android:elevation="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/feedSearchButton"
+            android:layout_width="56dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_chat_btn"
+            android:contentDescription="Поиск"
+            android:gravity="center"
+            android:text="🔍"
+            android:textSize="22sp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/feedSettingsButton"
+            android:layout_width="56dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_chat_btn"
+            android:contentDescription="Настройка ленты"
+            android:gravity="center"
+            android:text="⚙"
+            android:textSize="22sp" />
+
+    </LinearLayout>
+
     <!-- Верхняя панель текстовых страниц: стрелка «назад», иконка и название страницы. -->
     <LinearLayout
         android:id="@+id/infoTopBar"
