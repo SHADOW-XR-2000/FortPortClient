@@ -358,6 +358,34 @@
 
     </FrameLayout>
 
+    <!-- Нативные текстовые страницы (Поддержка, О нас, Конфиденциальность, Условия): содержимое строится в InfoPageController. -->
+    <FrameLayout
+        android:id="@+id/nativeInfoPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#C7EAF5"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/nativeInfoBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:importantForAccessibility="no" />
+
+        <FrameLayout
+            android:id="@+id/infoHost"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+    </FrameLayout>
+
     <!-- Нативная страница открытого поста: без нижней панели, сверху — стрелка «назад». -->
     <FrameLayout
         android:id="@+id/nativePostPanel"
@@ -890,6 +918,53 @@
 
         <TextView
             android:id="@+id/portSettingsTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:textColor="@android:color/white"
+            android:textSize="20sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+    </LinearLayout>
+
+    <!-- Верхняя панель текстовых страниц: стрелка «назад», иконка и название страницы. -->
+    <LinearLayout
+        android:id="@+id/infoTopBar"
+        android:layout_width="0dp"
+        android:layout_height="70dp"
+        android:background="#262626"
+        android:elevation="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/infoBackButton"
+            android:layout_width="56dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_chat_btn"
+            android:contentDescription="Назад"
+            android:gravity="center"
+            android:text="←"
+            android:textColor="#2AF5C0"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/infoTopIcon"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="12dp"
+            android:scaleType="fitCenter"
+            android:importantForAccessibility="no" />
+
+        <TextView
+            android:id="@+id/infoTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
