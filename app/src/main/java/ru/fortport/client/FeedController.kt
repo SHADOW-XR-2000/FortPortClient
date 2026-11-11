@@ -237,7 +237,7 @@ class FeedController(
 
     // ------------------------------------------------------------------ вкладки (шестерёнка в 1.1)
 
-    private fun showTabsDialog() {
+    fun showTabsDialog() {
         if (tabs.isEmpty()) {
             Toast.makeText(activity, "Список лент ещё не загружен", Toast.LENGTH_SHORT).show()
             return
@@ -261,7 +261,7 @@ class FeedController(
             .show()
     }
 
-    private fun showSearchStub() {
+    fun showSearchStub() {
         Toast.makeText(activity, "Поиск по ленте появится позже", Toast.LENGTH_SHORT).show()
     }
 
@@ -290,7 +290,7 @@ class FeedController(
             return when (viewType) {
                 HEADER -> {
                     val row = buildHeaderRow(ctx)
-                    margins(row, 12)
+                    margins(row, 0)
                     object : RecyclerView.ViewHolder(row) {}
                 }
                 POST -> {
@@ -345,22 +345,10 @@ class FeedController(
         }
     }
 
-    /** Строка 1.1: фон royal, слева «поиск», справа «настройка ленты». */
-    private fun buildHeaderRow(ctx: Context): View {
-        val row = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = UiUtil.royal(ctx)
-            setPadding(dp(ctx, 10), dp(ctx, 8), dp(ctx, 10), dp(ctx, 8))
-        }
-        fun btn(glyph: String, click: () -> Unit) = TextView(ctx).apply {
-            text = glyph; textSize = 22f; gravity = Gravity.CENTER
-            AeroButton.style(this)
-            setOnClickListener { click() }
-        }
-        row.addView(btn("🔍") { showSearchStub() }, LinearLayout.LayoutParams(dp(ctx, 44), dp(ctx, 44)))
-        row.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
-        row.addView(btn("⚙") { showTabsDialog() }, LinearLayout.LayoutParams(dp(ctx, 44), dp(ctx, 44)))
-        return row
-    }
+    /**
+     * Бывшая строка 1.1 (royal: «поиск» и «настройка ленты») переехала в закреплённую aero-панель вверху экрана
+     * (feedTopBar в activity_main.xml). Нулевой элемент списка остаётся «пустым», чтобы не сдвигать индексы адаптера;
+     * отступ под панель даёт paddingTop списка.
+     */
+    private fun buildHeaderRow(ctx: Context): View = View(ctx)
 }
