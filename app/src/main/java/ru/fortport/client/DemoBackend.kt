@@ -468,8 +468,9 @@ class DemoBackend(context: Context) {
         if (p == "/api/posts/search" && method == "GET") {
             val text = (q["text"] ?: "").trim().lowercase()
             val offset = q["offset"]?.toIntOrNull() ?: 0
-            val found = allPosts().filter { text.isNotEmpty() && it.optString("content").lowercase().contains(text) }
-                .sortedByDescending { it.optLong("createdMs") }
+            val nsfw = q["showNSFW"] == "true"
+            val found = allPosts().filter { text.isNotEmpty() && it.optString("content").lowercase().contains(text) && (nsfw || !it.optBoolean("nsfw")) }
+                .let { l -> if (q["sort"] == "old") l.sortedBy { it.optLong("createdMs") } else l.sortedByDescending { it.optLong("createdMs") } }
             val page = found.drop(offset).take(PAGE)
             return ok(obj(
                 "posts" to JSONArray().also { a -> page.forEach { a.put(postView(it)) } },
