@@ -465,6 +465,17 @@ class DemoBackend(context: Context) {
 
         // --- посты
         if (p == "/api/feed" && method == "POST") return feed(q, body)
+        if (p == "/api/posts/search" && method == "GET") {
+            val text = (q["text"] ?: "").trim().lowercase()
+            val offset = q["offset"]?.toIntOrNull() ?: 0
+            val found = allPosts().filter { text.isNotEmpty() && it.optString("content").lowercase().contains(text) }
+                .sortedByDescending { it.optLong("createdMs") }
+            val page = found.drop(offset).take(PAGE)
+            return ok(obj(
+                "posts" to JSONArray().also { a -> page.forEach { a.put(postView(it)) } },
+                "total" to found.size, "offset" to offset, "nextOffset" to offset + page.size
+            ))
+        }
         if (p == "/api/awards") return ok(obj("awards" to JSONArray(), "daily" to obj("available" to false)))
         m("/api/posts/(\\d+)")?.let { g ->
             val post = findPost(g[1].toLong()) ?: return fail(404, "Пост не найден")
