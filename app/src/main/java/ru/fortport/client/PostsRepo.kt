@@ -142,9 +142,13 @@ class PostsRepo(private val api: SiteApi) {
      * (`before`), для остальных сортировок — число уже загруженных постов (`offset`); null — первая страница.
      * На первой странице `before` НЕ передаём: сервер отвечает 400 «Invalid filter combination».
      */
-    /** GET /api/posts/search?text=…&sort=new&offset=… → {posts, total, offset, nextOffset} (по логу страницы /search). */
-    fun searchPosts(text: String, offset: Int): SearchPage {
-        val r = api.get("/api/posts/search?text=${URLEncoder.encode(text, "UTF-8")}&sort=new&offset=$offset")
+    /**
+     * GET /api/posts/search?text=…[&showNSFW=true]&sort=new|old&offset=… → {posts, total, offset, nextOffset} (по логам страницы /search).
+     * [sort]: "new" (новые сверху) или "old" (старые сверху); [nsfw] = чекбокс «18+» (без него параметр не передаётся).
+     */
+    fun searchPosts(text: String, offset: Int, sort: String = "new", nsfw: Boolean = false): SearchPage {
+        val flag = if (nsfw) "&showNSFW=true" else ""
+        val r = api.get("/api/posts/search?text=${URLEncoder.encode(text, "UTF-8")}$flag&sort=$sort&offset=$offset")
         if (r.code == 401) throw AuthLostException()
         if (r.code != 200) throw IllegalStateException("search ${r.code}")
         val o = JSONObject(r.body)

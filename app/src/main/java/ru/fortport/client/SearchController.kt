@@ -25,9 +25,11 @@ import ru.fortport.client.UiUtil.dp
  * Нативный поиск по постам (страница сайта /search), тема aero.
  * Сверху (под верхней панелью раздела) — строка поиска и «Найти», ниже — посты-результаты теми же карточками, что в ленте.
  *
- * Запрос (проверен по логу сайта): GET /api/posts/search?text={запрос}&sort=new&offset={n} →
+ * Запрос (проверен по логам сайта): GET /api/posts/search?text={запрос}[&showNSFW=true]&sort=new|old&offset={n} →
  * {posts:[…как в ленте…], total, offset, nextOffset}; страница = 15 постов, следующая — offset = nextOffset.
- * В логе только sort=new — другие виды сортировки и фильтры сайта не снимались, поэтому здесь поиск идёт по новым.
+ * Фильтры: сортировка («Новые» = sort=new, «Старые» = sort=old — старые посты сверху) и чекбокс «18+» (showNSFW=true;
+ * без галочки параметр не передаётся). Смена фильтра при уже выполненном поиске повторяет запрос.
+ * Настройки режима ленты на поиск не влияют.
  */
 class SearchController(
     override val activity: AppCompatActivity,
@@ -45,6 +47,8 @@ class SearchController(
         const val TAG = "SearchController"
         const val VIEW_DELAY_MS = 2500L
         const val TOPBAR_DP = 70
+        /** Значения параметра sort на сайте (по логу) и подписи. */
+        val SORTS = listOf("new" to "Новые", "old" to "Старые")
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -62,6 +66,8 @@ class SearchController(
     private var nextOffset = 0
     private var total = -1
     private var focusPending = true
+    private var sort = "new"
+    private var showNsfw = false
 
     private val adapter = Adapter()
     private val recycler = RecyclerView(activity)
@@ -101,6 +107,28 @@ class SearchController(
         }
         row.addView(go, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(activity, 46)).apply { leftMargin = dp(activity, 8) })
         panel.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        // Фильтры: сортировка и «18+».
+        val filters = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        var sortBtn: TextView? = null
+        val sortNames = SORTS.map { it.second }
+        val sb = AeroUi.dropdown(activity, { sortNames }, { SORTS.indexOfFirst { it.first == sort }.coerceAtLeast(0) }) { i ->
+            if (SORTS[i].first == sort) return@dropdown
+            sort = SORTS[i].first
+            sortBtn?.text = SORTS[i].second
+            filtersChanged()
+        }
+        sortBtn = sb
+        sb.text = SORTS[0].second
+        filters.addView(AeroUi.dropdownView(sb), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val nsfwBox = AeroUi.checkBox(activity, "Показать 18+")
+        nsfwBox.setOnCheckedChangeListener { _, checked ->
+            if (checked == showNsfw) return@setOnCheckedChangeListener
+            showNsfw = checked
+            filtersChanged()
+        }
+        filters.addView(nsfwBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(activity, 12) })
+        panel.addView(filters, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(activity, 8) })
 
         count.textSize = 13f
         count.setTextColor(AeroUi.labelColor(activity))
@@ -190,6 +218,14 @@ class SearchController(
         fetch(generation, 0)
     }
 
+    /** Сменили сортировку или «18+»: если поиск уже был — повторить с первой страницы. */
+    private fun filtersChanged() {
+        if (searched && activeQuery.isNotEmpty()) {
+            input.setText(activeQuery)
+            runSearch()
+        }
+    }
+
     private fun loadMore() {
         if (loading || !hasMore || posts.isEmpty()) return
         loading = true; failed = false
@@ -206,6 +242,8 @@ class SearchController(
 
     private fun fetch(gen: Int, offset: Int) {
         val q = activeQuery
+        val srt = sort
+        val nsfw = showNsfw
         api.io.execute {
             try {
                 when (api.ensureUserId()) {
@@ -213,7 +251,7 @@ class SearchController(
                     2 -> throw IllegalStateException("session")
                 }
                 if (!repo.usersLoaded) loadUsersAsync()
-                val page = repo.searchPosts(q, offset)
+                val page = repo.searchPosts(q, offset, srt, nsfw)
                 onUi {
                     if (gen != generation) return@onUi
                     val known = posts.mapTo(HashSet()) { p -> p.id }
