@@ -33,6 +33,9 @@ sealed class FeedSource {
     class User(val id: Long) : FeedSource()
 }
 
+/** Страница результатов поиска: посты, следующий offset и общее число найденных (-1, если сервер не сообщил). */
+class SearchPage(val posts: List<Post>, val nextOffset: Int, val total: Int)
+
 class LikeResult(val liked: Boolean, val disliked: Boolean, val likeCount: Int, val dislikeCount: Int)
 
 /** Результат запроса: ok либо текст ошибки; authLost — сервер ответил 401. */
@@ -139,6 +142,19 @@ class PostsRepo(private val api: SiteApi) {
      * (`before`), для остальных сортировок — число уже загруженных постов (`offset`); null — первая страница.
      * На первой странице `before` НЕ передаём: сервер отвечает 400 «Invalid filter combination».
      */
+    /** GET /api/posts/search?text=…&sort=new&offset=… → {posts, total, offset, nextOffset} (по логу страницы /search). */
+    fun searchPosts(text: String, offset: Int): SearchPage {
+        val r = api.get("/api/posts/search?text=${URLEncoder.encode(text, "UTF-8")}&sort=new&offset=$offset")
+        if (r.code == 401) throw AuthLostException()
+        if (r.code != 200) throw IllegalStateException("search ${r.code}")
+        val o = JSONObject(r.body)
+        val arr = o.optJSONArray("posts") ?: JSONArray()
+        val me = this.me
+        val out = ArrayList<Post>(arr.length())
+        for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { out.add(PostParser.post(it, me)) }
+        return SearchPage(out, o.optInt("nextOffset", offset + out.size), o.optInt("total", -1))
+    }
+
     fun loadPosts(source: FeedSource, cursor: Long?): List<Post> {
         val q = StringBuilder()
         var body = "{}"

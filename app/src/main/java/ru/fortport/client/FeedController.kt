@@ -261,10 +261,6 @@ class FeedController(
             .show()
     }
 
-    fun showSearchStub() {
-        Toast.makeText(activity, "Поиск по ленте появится позже", Toast.LENGTH_SHORT).show()
-    }
-
     // ------------------------------------------------------------------ адаптер
 
     private inner class Adapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
