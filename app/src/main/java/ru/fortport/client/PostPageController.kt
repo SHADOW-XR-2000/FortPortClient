@@ -56,7 +56,7 @@ class ComposerView(
 
     init {
         orientation = VERTICAL
-        background = UiUtil.royal(context)
+        background = AeroUi.panelBackground(context)
         setPadding(dp(context, 12), dp(context, 10), dp(context, 12), dp(context, 10))
 
         input.apply {
@@ -75,7 +75,7 @@ class ComposerView(
         addView(input, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP))
 
         chip.apply {
-            textSize = 13f; setTextColor(Color.WHITE); visibility = View.GONE
+            textSize = 13f; setTextColor(AeroUi.labelColor(context)); visibility = View.GONE
             setPadding(0, dp(context, 6), 0, 0)
             setOnClickListener { attachment = null; visibility = View.GONE }
         }
@@ -571,7 +571,7 @@ class PostPageController(
         // Шапка: аватар, имя, дата, «Удалить» (для своих).
         val head = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            background = UiUtil.royal(ctx)
+            background = AeroUi.panelBackground(ctx)
             setPadding(dp(ctx, 8), dp(ctx, 6), dp(ctx, 8), dp(ctx, 6))
         }
         val av = ImageView(ctx).apply {
@@ -585,18 +585,17 @@ class PostPageController(
         api.loadAvatar(av, c.profilePicture)
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         val role = c.role.badge.ifBlank { c.role.displayRole }
-        col.addView(UiUtil.text(ctx, 16f, Color.WHITE, bold = true, maxLines = 1).apply {
+        col.addView(UiUtil.text(ctx, 16f, AeroUi.titleColor(ctx), bold = true, maxLines = 1).apply {
             text = c.username.ifBlank { "Неизвестный" } + if (role.isNotBlank()) "  · $role" else ""
-            setShadowLayer(2f, 0f, 1f, 0x99000000.toInt())
             setOnClickListener { onOpenProfile(c.userId) }
         })
-        col.addView(UiUtil.text(ctx, 12f, Color.WHITE).apply { text = UiUtil.formatDate(c.createdAt); setShadowLayer(2f, 0f, 1f, 0x99000000.toInt()) })
+        col.addView(UiUtil.text(ctx, 12f, AeroUi.labelColor(ctx)).apply { text = UiUtil.formatDate(c.createdAt) })
         head.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(ctx, 8) })
         if (c.userId == repo.me) {
             head.addView(
                 TextView(ctx).apply {
-                    text = "удалить"; textSize = 12f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-                    background = UiUtil.rect(0x33FFFFFF, Color.WHITE, 1, 6, ctx)
+                    text = "удалить"; textSize = 12f; setTextColor(AeroButton.textColor(ctx)); gravity = Gravity.CENTER
+                    AeroButton.style(this)
                     setPadding(dp(ctx, 8), dp(ctx, 4), dp(ctx, 8), dp(ctx, 4))
                     setOnClickListener { confirmDelete(c) }
                 }

@@ -79,7 +79,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
         val ctx = context
         val row = LinearLayout(ctx).apply {
             orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            background = UiUtil.royal(ctx)
+            background = AeroUi.panelBackground(ctx)
             setPadding(dp(ctx, 8), dp(ctx, 8), dp(ctx, 8), dp(ctx, 6))
         }
         val community = p.communityId?.let { host.repo.cachedCommunity(it) }
@@ -122,8 +122,8 @@ class PostCardView(context: Context) : LinearLayout(context) {
                         small.setOnClickListener { p.userId?.let { host.openProfile(it) } }
                     }
                     addView(
-                        UiUtil.text(ctx, 14f, Color.WHITE, maxLines = 1).apply {
-                            text = authorName; setShadowLayer(2f, 0f, 1f, 0x99000000.toInt())
+                        UiUtil.text(ctx, 14f, AeroUi.titleColor(ctx), maxLines = 1).apply {
+                            text = authorName
                             if (!p.isAnonymous) setOnClickListener { p.userId?.let { host.openProfile(it) } }
                         },
                         UiUtil.lp(UiUtil.WRAP, UiUtil.WRAP).apply { marginStart = dp(ctx, 6) }
@@ -141,7 +141,7 @@ class PostCardView(context: Context) : LinearLayout(context) {
         }
         val role = if (p.isAnonymous) "" else p.role.badge.ifBlank { p.role.displayRole }
         val date = UiUtil.formatDate(p.createdAt) + (if (p.isPinned) "  📌" else "") + (if (role.isNotBlank()) "  ·  $role" else "")
-        col.addView(UiUtil.text(ctx, 12f, Color.WHITE).apply { text = date; setShadowLayer(2f, 0f, 1f, 0x99000000.toInt()) })
+        col.addView(UiUtil.text(ctx, 12f, AeroUi.labelColor(ctx)).apply { text = date })
 
         val menu = TextView(ctx).apply {
             text = "▼"; textSize = 16f; gravity = Gravity.CENTER
@@ -152,8 +152,8 @@ class PostCardView(context: Context) : LinearLayout(context) {
         headerHolder.addView(row)
     }
 
-    private fun titleText(s: String) = UiUtil.text(context, 18f, Color.WHITE, bold = true, maxLines = 1).apply {
-        text = s; setShadowLayer(2f, 0f, 1f, 0x99000000.toInt())
+    private fun titleText(s: String) = UiUtil.text(context, 18f, AeroUi.titleColor(context), bold = true, maxLines = 1).apply {
+        text = s
     }
 
     /** Информация о порте не приходит с постом — подгружаем и перерисовываем только шапку. */
@@ -346,12 +346,11 @@ class PostCardView(context: Context) : LinearLayout(context) {
         commentsHolder.visibility = if (showComments) View.VISIBLE else View.GONE
         if (!showComments) return
         val ctx = context
-        val t = UiUtil.text(ctx, 15f, Color.WHITE, bold = true).apply {
+        val t = UiUtil.text(ctx, 15f, AeroButton.textColor(ctx), bold = true).apply {
             text = "Смотреть комментарии" + if (p.commentCount > 0) " (${p.commentCount})" else ""
             gravity = Gravity.CENTER
-            background = UiUtil.royal(ctx)
+            AeroButton.style(this)
             setPadding(dp(ctx, 12), dp(ctx, 11), dp(ctx, 12), dp(ctx, 11))
-            setShadowLayer(2f, 0f, 1f, 0x99000000.toInt())
         }
         t.setOnClickListener { host.openPost(p) }
         commentsHolder.addView(t)

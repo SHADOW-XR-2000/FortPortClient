@@ -379,7 +379,7 @@ class PortController(
         val head = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = UiUtil.royal(ctx)
+            background = AeroUi.panelBackground(ctx)
             setPadding(dp(ctx, 10), dp(ctx, 10), dp(ctx, 10), dp(ctx, 10))
         }
         val avatar = ImageView(ctx).apply {
@@ -392,11 +392,11 @@ class PortController(
         api.loadAvatar(avatar, i.avatar)
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         head.addView(col, UiUtil.lp(0, UiUtil.WRAP, 1f).apply { marginStart = dp(ctx, 12) })
-        col.addView(UiUtil.text(ctx, 20f, Color.WHITE, bold = true).apply {
-            text = i.name; setShadowLayer(2f, 0f, 1f, 0x99000000.toInt())
+        col.addView(UiUtil.text(ctx, 20f, AeroUi.titleColor(ctx), bold = true).apply {
+            text = i.name
         })
-        col.addView(UiUtil.text(ctx, 15f, Color.WHITE).apply {
-            text = "Подписчики: ${i.subscribers}"; setShadowLayer(2f, 0f, 1f, 0x99000000.toInt())
+        col.addView(UiUtil.text(ctx, 15f, AeroUi.labelColor(ctx)).apply {
+            text = "Подписчики: ${i.subscribers}"
             setPadding(0, dp(ctx, 6), 0, 0)
         })
         card.addView(head, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP))
