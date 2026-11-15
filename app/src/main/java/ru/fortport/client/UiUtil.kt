@@ -81,7 +81,7 @@ object UiUtil {
     fun sub(ctx: Context) = if (isNight(ctx)) 0xFFBDBDBD.toInt() else SUB
     fun softBg(ctx: Context) = if (isNight(ctx)) 0xFF2A2F40.toInt() else 0xFFF6F8FA.toInt()
     fun softStroke(ctx: Context) = if (isNight(ctx)) 0xFF454D66.toInt() else 0xFFCCCFE0.toInt()
-    fun cardStroke(ctx: Context) = if (isNight(ctx)) 0xFF000000.toInt() else BORDER
+    fun cardStroke(ctx: Context) = if (isNight(ctx)) 0xFF2E4560.toInt() else 0xFFC5D5E6.toInt() // мягкая Aero-обводка вместо чёрной/тёмно-синей
 
     const val BORDER = 0xFF1B2A4A.toInt()
     const val WHITE = Color.WHITE

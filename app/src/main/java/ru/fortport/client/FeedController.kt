@@ -358,7 +358,11 @@ class FeedController(
             val id = posts.getOrNull(pos - 1)?.id ?: return
             if (id in viewed) return
             // Как trackPostView на сайте: «просмотр» засчитываем, когда пост побыл на экране.
-            val r = Runnable { viewed.add(id); repo.pool.execute { repo.view(id) } }
+            val r = Runnable {
+                viewed.add(id)
+                // После смены темы Activity пересоздаётся и пул репозитория уже остановлен.
+                try { if (!repo.pool.isShutdown) repo.pool.execute { repo.view(id) } } catch (e: java.util.concurrent.RejectedExecutionException) { /* экран закрыт */ }
+            }
             holder.itemView.setTag(R.id.feed_view_task, r)
             ui.postDelayed(r, VIEW_DELAY_MS)
         }
