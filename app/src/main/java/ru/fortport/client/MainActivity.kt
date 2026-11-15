@@ -186,6 +186,7 @@ class MainActivity : AppCompatActivity() {
         window.decorView.postDelayed({ UpdateManager.autoCheck(this) }, 4000)
 
         webView = findViewById(R.id.webView)
+        window.decorView.post { handleLinkIntent(intent) }
         swipeRefresh = findViewById(R.id.swipeRefresh)
         progressBar = findViewById(R.id.progressBar)
         offlineView = findViewById(R.id.offlineView)
@@ -2714,6 +2715,46 @@ class MainActivity : AppCompatActivity() {
     private fun isAuthPage(url: String?): Boolean {
         val path = try { Uri.parse(url).path.orEmpty().trimEnd('/') } catch (e: Exception) { "" }
         return listOf(LOGIN_PATH, "/register", "/signup").any { path == it || path.startsWith("$it/") }
+    }
+
+    // ---------------------------------------------------------------- внешние и внутренние ссылки fortport.ru
+
+    private var pendingLink: Uri? = null
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleLinkIntent(intent)
+    }
+
+    /** Intent с адресом сайта (из браузера, мессенджера или чата) → нативный пост/профиль/порт. */
+    private fun handleLinkIntent(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (intent.action != Intent.ACTION_VIEW || !SiteLinks.isSite(uri)) return
+        intent.data = null // не обрабатывать повторно при повороте экрана
+        pendingLink = uri
+        tryOpenPendingLink(40)
+    }
+
+    /** Ждёт, пока приложение авторизуется и покажет нативный экран (холодный старт), и открывает ссылку. */
+    private fun tryOpenPendingLink(attempts: Int) {
+        val uri = pendingLink ?: return
+        if (isFinishing || isDestroyed) return
+        if (isLoggedIn == true || siteApi.isDemo) {
+            pendingLink = null
+            if (paymentWebView != null) closePaymentWebView()
+            val t = SiteLinks.parse(uri.toString())
+            when (t?.kind) {
+                SiteLinks.Kind.POST -> openNativePost(t.id, null)
+                SiteLinks.Kind.PROFILE -> openNativeProfile(t.id)
+                SiteLinks.Kind.PORT -> openNativeCommunity(t.id)
+                null -> openSitePage(uri.encodedPath.orEmpty() + (uri.encodedQuery?.let { "?$it" } ?: ""))
+            }
+        } else if (isLoggedIn == false || attempts <= 0) {
+            pendingLink = null // не вошли — ссылку открыть нельзя
+        } else {
+            window.decorView.postDelayed({ tryOpenPendingLink(attempts - 1) }, 500)
+        }
     }
 
     override fun onResume() {
