@@ -438,7 +438,13 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun startPolling() {
-        pollThread.execute {
+        // Чат мог закрыться, пока грузились сообщения (например, переход по ссылке): пул уже остановлен.
+        if (!active || pollThread.isShutdown) return
+        try { pollThread.execute { pollLoop() } } catch (e: java.util.concurrent.RejectedExecutionException) { /* закрыт */ }
+    }
+
+    private fun pollLoop() {
+        run {
             var failures = 0
             while (active) {
                 try {
@@ -762,7 +768,7 @@ class ChatActivity : AppCompatActivity() {
     private fun openLink(url: String) {
         if (SiteLinks.parse(url) != null) {
             startActivity(
-                Intent(this, MainActivity::class.java).setData(Uri.parse(url))
+                Intent(Intent.ACTION_VIEW, Uri.parse(url), this, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             )
             finish()
