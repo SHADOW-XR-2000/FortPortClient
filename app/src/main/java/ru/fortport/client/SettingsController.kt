@@ -92,7 +92,7 @@ class SettingsController(
         const val FILE_FIELD = "file"
     }
 
-    private enum class Tab { PROFILE, SECURITY, CUSTOM }
+    private enum class Tab { PROFILE, SECURITY, CUSTOM, ABOUT }
     private enum class Img { AVATAR, PROFILE_BG, FEED_BG }
 
     private val d = activity.resources.displayMetrics.density
@@ -269,8 +269,10 @@ class SettingsController(
             Tab.PROFILE -> fillProfile(bubble)
             Tab.SECURITY -> fillSecurity(bubble)
             Tab.CUSTOM -> fillCustom(bubble)
+            Tab.ABOUT -> fillAbout(bubble)
         }
         content.addView(bubble, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP).apply { setMargins(dp(14), dp(16), dp(14), 0) })
+        if (tab == Tab.ABOUT) { saveButton = null; content.addView(View(activity), UiUtil.lp(UiUtil.MATCH, dp(24))); scroll.scrollTo(0, 0); return }
         val save = button("Сохранить") { save() }
         saveButton = save
         content.addView(save, UiUtil.lp(UiUtil.MATCH, dp(56)).apply { setMargins(dp(14), dp(16), dp(14), 0) })
@@ -282,7 +284,9 @@ class SettingsController(
         val row = LinearLayout(activity)
         row.orientation = LinearLayout.HORIZONTAL
         row.setPadding(dp(10), dp(12), dp(10), 0)
-        listOf(Tab.PROFILE to "Профиль", Tab.SECURITY to "Безопасность", Tab.CUSTOM to "Кастомизация").forEach { (t, title) ->
+        // Четыре вкладки не помещаются в ряд: карусель с горизонтальной прокруткой (активная вкладка остаётся в поле зрения).
+        val hs = android.widget.HorizontalScrollView(activity).apply { isHorizontalScrollBarEnabled = false; addView(row) }
+        listOf(Tab.PROFILE to "Профиль", Tab.SECURITY to "Безопасность", Tab.CUSTOM to "Кастомизация", Tab.ABOUT to "О проекте").forEach { (t, title) ->
             val active = t == tab
             val tv = UiUtil.text(activity, 14f, if (active) AeroButton.textColor(activity) else AeroUi.labelColor(activity), bold = active, maxLines = 1).apply {
                 text = title
@@ -291,9 +295,60 @@ class SettingsController(
                 setPadding(dp(4), dp(12), dp(4), dp(12))
                 setOnClickListener { if (tab != t) { tab = t; render() } }
             }
-            row.addView(tv, UiUtil.lp(0, UiUtil.WRAP, 1f).apply { setMargins(dp(4), 0, dp(4), 0) })
+            tv.setPadding(dp(16), dp(12), dp(16), dp(12))
+            row.addView(tv, UiUtil.lp(UiUtil.WRAP, UiUtil.WRAP).apply { setMargins(dp(4), 0, dp(4), 0) })
+            if (active) hs.post { hs.scrollTo((tv.left - dp(24)).coerceAtLeast(0), 0) }
         }
-        return row
+        return hs
+    }
+
+    // ---- вкладка «О проекте»
+
+    private fun assetBitmap(path: String): android.graphics.Bitmap? = try {
+        activity.assets.open(path).use { android.graphics.BitmapFactory.decodeStream(it) }
+    } catch (e: Exception) { null }
+
+    /** Плашка «иконка + название»; иконка берётся из assets/ui/icons/[icon], без файла — [fallback]-эмодзи. */
+    private fun linkPlate(icon: String, fallback: String, label: String, url: String): View = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = AeroUi.fieldBackground(activity)
+        setPadding(dp(12), dp(10), dp(12), dp(10))
+        isClickable = true; isFocusable = true
+        val bmp = assetBitmap("ui/icons/$icon")
+        if (bmp != null) addView(ImageView(activity).apply { setImageBitmap(bmp) }, UiUtil.lp(dp(32), dp(32)))
+        else addView(UiUtil.text(activity, 24f, AeroUi.titleColor(activity)).apply { text = fallback; gravity = Gravity.CENTER }, UiUtil.lp(dp(32), dp(32)))
+        addView(UiUtil.text(activity, 17f, AeroUi.titleColor(activity), bold = true, maxLines = 1).apply { text = label },
+            UiUtil.lp(0, UiUtil.WRAP, 1f).apply { leftMargin = dp(12) })
+        setOnClickListener {
+            val uri = android.net.Uri.parse(url)
+            try {
+                // Страницы fortport.ru открываются нативно (MainActivity разбирает ссылку), остальное — во внешнем приложении.
+                if (SiteLinks.isSite(uri)) activity.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_VIEW, uri, activity, MainActivity::class.java)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                ) else activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri))
+            } catch (e: Exception) { toast("Не удалось открыть ссылку", false) }
+        }
+    }
+
+    private fun fillAbout(b: LinearLayout) {
+        val splash = assetBitmap("styles/" + if (UiUtil.isNight(activity)) "shadowxr_darktheme.png" else "shadowxr_daytheme.png")
+        b.add(title("О проекте"))
+        b.add(UiUtil.text(activity, 15f, AeroUi.labelColor(activity)).apply {
+            text = "Данный проект не является официальным мобильным клиентом для fortport, и создан только в экспериментальных целях. Код приложения распространяется в открытом виде."
+        }, 14)
+        b.add(UiUtil.text(activity, 15f, AeroUi.labelColor(activity)).apply { text = "Если возникли вопросы, можете связаться ниже." }, 12)
+        b.add(linkPlate("project_icon.png", "👤", "FortPort", "https://fortport.ru/profile?id=1785517307920"), 14)
+        b.add(linkPlate("youtube_icon.png", "▶", "YouTube", "https://youtube.com/@SHADOW_X-RAY"), 8)
+        b.add(linkPlate("github_icon.png", "🐙", "GitHub", "https://github.com/SHADOW-XR-2000/FortPortClient"), 8)
+        val ver = try { activity.packageManager.getPackageInfo(activity.packageName, 0).versionName } catch (e: Exception) { null }
+        b.add(UiUtil.text(activity, 13f, AeroUi.labelColor(activity)).apply {
+            text = (if (ver != null) "Версия $ver\n" else "") + "2026"; gravity = Gravity.CENTER; alpha = 0.8f
+        }, 16)
+        if (splash != null) b.add(ImageView(activity).apply {
+            setImageBitmap(splash); adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER
+        }, 16)
     }
 
     private fun bubble(): LinearLayout = LinearLayout(activity).apply {
@@ -794,7 +849,7 @@ class SettingsController(
         val uploads: List<Pair<Img, Ep>> = when (currentTab) {
             Tab.PROFILE -> emptyList() // аватар и фон уходят в той же форме, что и поля профиля
             Tab.CUSTOM -> listOf(Img.FEED_BG to Endpoints.feedBg)
-            Tab.SECURITY -> emptyList()
+            Tab.SECURITY, Tab.ABOUT -> emptyList()
         }.filter { pendingImg.containsKey(it.first) }
         val bioImages = if (currentTab == Tab.PROFILE) listOf(Img.AVATAR, Img.PROFILE_BG).filter { pendingImg.containsKey(it) } else emptyList()
         val pendingSnapshot = HashMap(pendingImg)
