@@ -180,7 +180,6 @@ class UserMenu(
         nameView.maxLines = 1
         nameView.ellipsize = android.text.TextUtils.TruncateAt.END
         col.addView(nameView)
-        col.addView(TextView(activity).apply { text = "В сети"; textSize = 12f; setTextColor(c.dim) })
         addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(12) })
         setOnClickListener { act(onProfile) }
     }
