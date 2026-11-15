@@ -419,10 +419,15 @@ class MainActivity : AppCompatActivity() {
                 showNativeSection(NativeSection.COMMUNITIES)
             },
             onOpenWeb = { path ->
-                returnSection = NativeSection.PROFILE
-                returnProfileId = pendingProfileId
-                hideNativeSection()
-                openWebPage("$SITE_ORIGIN$path")
+                if (path == "/settings") {
+                    // «Редактировать» на своём профиле — нативные настройки (через веб сессия сбрасывалась).
+                    openNativeSettings()
+                } else {
+                    returnSection = NativeSection.PROFILE
+                    returnProfileId = pendingProfileId
+                    hideNativeSection()
+                    openWebPage("$SITE_ORIGIN$path")
+                }
             },
             onOpenChat = openChat,
             onBalanceChanged = { refreshCdCoinsBalance() },
