@@ -12,7 +12,6 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -43,6 +42,7 @@ class FeedController(
         private const val TAG = "FeedController"
         private const val PREFS = "feed_ui"
         private const val KEY_TAB = "tab_name"
+        private const val KEY_TAB_ID = "tab_id"
         private const val VIEW_DELAY_MS = 2500L
     }
 
@@ -53,6 +53,7 @@ class FeedController(
 
     private val posts = ArrayList<Post>()
     private var tabs: List<FeedTab> = emptyList()
+    private var tabsLoaded = false
     private var activeTab: FeedTab = repo.defaultTab()
 
     private var started = false
@@ -126,8 +127,11 @@ class FeedController(
                     val t = repo.loadFeedTabs()
                     if (t != null) {
                         tabs = t
+                        val savedId = prefs.getLong(KEY_TAB_ID, 0L)
                         val saved = prefs.getString(KEY_TAB, null)
-                        activeTab = t.firstOrNull { it.name == saved } ?: t.firstOrNull() ?: repo.defaultTab()
+                        activeTab = t.firstOrNull { savedId != 0L && it.id == savedId }
+                            ?: t.firstOrNull { it.name == saved } ?: t.firstOrNull() ?: repo.defaultTab()
+                        tabsLoaded = true
                     }
                 }
                 if (!repo.usersLoaded) loadUsersAsync()
@@ -237,29 +241,54 @@ class FeedController(
 
     // ------------------------------------------------------------------ вкладки (шестерёнка в 1.1)
 
+    /** Окно «Настройка ленты» (Aero): выбор ленты, создание, правка, удаление — см. [FeedSettings]. */
     fun showTabsDialog() {
-        if (tabs.isEmpty()) {
+        if (!tabsLoaded) {
             Toast.makeText(activity, "Список лент ещё не загружен", Toast.LENGTH_SHORT).show()
             return
         }
-        val names = tabs.map { it.name.ifBlank { "Лента" } }.toTypedArray()
-        val cur = tabs.indexOfFirst { it.name == activeTab.name }.coerceAtLeast(0)
-        AlertDialog.Builder(activity)
-            .setTitle("Настройка ленты")
-            .setSingleChoiceItems(names, cur) { d, which ->
-                d.dismiss()
-                val t = tabs[which]
-                if (t.name != activeTab.name) {
-                    activeTab = t
-                    prefs.edit().putString(KEY_TAB, t.name).apply()
-                    loadedOnce = false
-                    posts.clear(); adapter.notifyDataSetChanged()
-                    reload()
-                }
-            }
-            .setNegativeButton("Закрыть", null)
-            .show()
+        FeedSettings(activity, api, repo, { activeTab }, ::selectTab, ::onTabsChanged).show(tabs)
     }
+
+    private fun sameTab(a: FeedTab, b: FeedTab) = if (a.id != 0L || b.id != 0L) a.id == b.id else a.name == b.name
+
+    private fun saveActive() {
+        prefs.edit().putLong(KEY_TAB_ID, activeTab.id).putString(KEY_TAB, activeTab.name).apply()
+    }
+
+    private fun restartFeed() {
+        loadedOnce = false
+        posts.clear(); adapter.notifyDataSetChanged()
+        reload()
+    }
+
+    private fun selectTab(t: FeedTab) {
+        if (sameTab(t, activeTab)) return
+        activeTab = t
+        saveActive()
+        restartFeed()
+    }
+
+    /** Список лент на сервере изменился: удалили активную — берём первую; правили активную — перечитываем посты. */
+    private fun onTabsChanged(list: List<FeedTab>) {
+        val old = activeTab
+        tabs = list
+        val cur = list.firstOrNull { it.id != 0L && it.id == old.id }
+        when {
+            cur == null -> {
+                activeTab = list.firstOrNull() ?: repo.defaultTab()
+                saveActive()
+                restartFeed()
+            }
+            queryChanged(cur, old) -> { activeTab = cur; saveActive(); restartFeed() }
+            else -> { activeTab = cur; saveActive() }
+        }
+    }
+
+    /** Поля, от которых зависит запрос постов (название и «спойлеры» на него не влияют). */
+    private fun queryChanged(a: FeedTab, b: FeedTab) =
+        a.filterType != b.filterType || a.sortType != b.sortType || a.timerange != b.timerange || a.rangeJson != b.rangeJson ||
+            a.showNsfw != b.showNsfw || a.showAnonymous != b.showAnonymous || a.showMuted != b.showMuted
 
     // ------------------------------------------------------------------ адаптер
 

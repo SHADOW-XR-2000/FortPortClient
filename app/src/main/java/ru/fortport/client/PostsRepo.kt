@@ -23,8 +23,17 @@ class FeedTab(
     val timerange: String?,
     val showNsfw: Boolean,
     val showAnonymous: Boolean,
-    val showMuted: Boolean
+    val showMuted: Boolean,
+    /** settingId на сервере (0 — вкладка по умолчанию, ещё не сохранённая). */
+    val id: Long = 0L,
+    val showSpoiler: Boolean = true,
+    /** Точный диапазон дат: JSON-массив «[от, до]» в unix-секундах (продвинутая опция сайта); у обычных лент null. */
+    val rangeJson: String? = null
 )
+
+/** Порт или друг для выбора в смешанной ленте (GET /api/users/{me}/commIds | /friends). */
+class EntityLite(val id: Long, val name: String, val avatar: String)
+
 
 /** Что именно запрашиваем у POST /api/feed. */
 sealed class FeedSource {
@@ -110,6 +119,46 @@ class PostsRepo(private val api: SiteApi) {
 
     // ------------------------------------------------------------------ вкладки ленты
 
+    /**
+     * Создание (existingId == null → POST) и правка (PUT с settingId) ленты: /api/users/feedlist, JSON как в feed.js сайта
+     * (проверено по логу создания; PUT и DELETE — по коду сайта). timerange: null | строка («24h», «3d», …) | массив [от, до].
+     */
+    fun saveFeed(existingId: Long?, t: FeedTab): Outcome = safe {
+        val o = JSONObject()
+        o.put("settingName", t.name)
+        o.put("filterType", t.filterType)
+        o.put("sortType", t.sortType)
+        o.put("showNsfw", if (t.showNsfw) 1 else 0)
+        o.put("showSpoiler", if (t.showSpoiler) 1 else 0)
+        o.put("showMuted", if (t.showMuted) 1 else 0)
+        o.put("showAnonymous", if (t.showAnonymous) 1 else 0)
+        o.put("timerange", when {
+            t.rangeJson != null -> JSONArray(t.rangeJson)
+            !t.timerange.isNullOrBlank() -> t.timerange
+            else -> JSONObject.NULL
+        })
+        if (existingId != null) o.put("settingId", existingId)
+        outcome(api.send(if (existingId != null) "PUT" else "POST", "/api/users/feedlist", o.toString()))
+    }
+
+    fun deleteFeed(settingId: Long): Outcome = safe {
+        outcome(api.send("DELETE", "/api/users/feedlist", JSONObject().put("settingId", settingId).toString()))
+    }
+
+    /** Порты (kind = "ports") или друзья ("friends") пользователя для выбора в смешанной ленте; null — не удалось. */
+    fun loadEntities(kind: String): List<EntityLite>? = try {
+        val r = api.get("/api/users/$me/${if (kind == "ports") "commIds" else "friends"}")
+        if (r.code != 200) null else {
+            val a = JSONArray(r.body)
+            val out = ArrayList<EntityLite>(a.length())
+            for (i in 0 until a.length()) a.optJSONObject(i)?.let { o ->
+                val id = o.optLong("id")
+                if (id > 0) out.add(EntityLite(id, api.str(o, "username"), api.str(o, "profilePicture")))
+            }
+            out
+        }
+    } catch (e: Exception) { null }
+
     /** null — не удалось (сеть/сервер). Пустой список — у пользователя нет настроенных вкладок. */
     fun loadFeedTabs(): List<FeedTab>? {
         val r = api.get("/api/users/feedlist")
@@ -126,7 +175,10 @@ class PostsRepo(private val api: SiteApi) {
                     timerange = if (o.opt("timerange") is String) o.optString("timerange") else null,
                     showNsfw = o.optInt("showNsfw", 0) == 1,
                     showAnonymous = o.optInt("showAnonymous", 1) != 0,
-                    showMuted = o.optInt("showMuted", 1) != 0
+                    showMuted = o.optInt("showMuted", 1) != 0,
+                    id = o.optLong("settingId", 0L),
+                    showSpoiler = o.optInt("showSpoiler", 1) != 0,
+                    rangeJson = o.optJSONArray("timerange")?.toString()
                 )
             )
         }
@@ -237,6 +289,8 @@ class PostsRepo(private val api: SiteApi) {
             if (ports.length() > 0) o.put("communityIds", ports)
             if (us.length() > 0) o.put("userIds", us)
         }
+        // Точный диапазон дат уходит в теле (feed.js, buildFeedBody).
+        t.rangeJson?.let { o.put("timerange", JSONArray(it)) }
         return o.toString()
     }
 
@@ -320,6 +374,11 @@ class PostsRepo(private val api: SiteApi) {
 
     fun muteUser(userId: Long): Outcome = safe {
         outcome(api.send("POST", "/api/users/mute", JSONObject().put("targetUserId", userId).toString()))
+    }
+
+    /** «Показать пользователя»: DELETE /api/users/mute {targetUserId} → {success, message:"User unmuted"} (лог профиля). */
+    fun unmuteUser(userId: Long): Outcome = safe {
+        outcome(api.send("DELETE", "/api/users/mute", JSONObject().put("targetUserId", userId).toString()))
     }
 
     fun pin(postId: Long, pin: Boolean): Outcome = safe {

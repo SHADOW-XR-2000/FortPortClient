@@ -65,7 +65,9 @@ class ProfileController(
 
     private class Info(
         val id: Long, val name: String, val avatar: String, val status: String,
-        val role: UserRole
+        val role: UserRole,
+        /** GET /api/users/{id}.isMuted — пользователь скрыт у смотрящего (меню «⋯»). */
+        val muted: Boolean = false
     )
 
     private class Bio(
@@ -179,7 +181,8 @@ class ProfileController(
         role = UserRole(
             o.optBoolean("isOwner"), o.optBoolean("isDeveloper"), o.optBoolean("isModerator"),
             api.str(o, "displayRole")
-        )
+        ),
+        muted = o.optBoolean("isMuted")
     )
 
     private fun parseBio(o: JSONObject) = Bio(
@@ -347,6 +350,30 @@ class ProfileController(
 
     private fun toast(s: String) = Toast.makeText(activity, s, Toast.LENGTH_SHORT).show()
 
+    private fun showProfileMenu(anchor: View, i: Info) {
+        val items = ArrayList<Pair<String, () -> Unit>>()
+        items.add("Поделиться профилем" to {
+            ShareDialog.show(activity, api, "${SiteApi.ORIGIN}/profile?id=${i.id}", "Поделиться профилем")
+        })
+        if (!isOwn) items.add((if (i.muted) "Показать пользователя" else "Скрыть пользователя") to { toggleMute(i) })
+        AeroUi.popupMenu(activity, anchor, items)
+    }
+
+    /** POST /api/users/mute — скрыть, DELETE — показать (лог профиля); затем профиль и посты перечитываются. */
+    private fun toggleMute(i: Info) {
+        val wasMuted = i.muted
+        repo.pool.execute {
+            val r = if (wasMuted) repo.unmuteUser(i.id) else repo.muteUser(i.id)
+            onUi {
+                when {
+                    r.authLost -> onAuthLost()
+                    r.ok -> { toast(if (wasMuted) "Пользователь снова виден" else "Пользователь скрыт"); reload() }
+                    else -> toast(r.error.ifBlank { "Не удалось выполнить" })
+                }
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ друзья и чат
 
     private fun friendAction(path: String, body: JSONObject, doneMsg: String) {
@@ -497,6 +524,21 @@ class ProfileController(
                 setPadding(0, dp(ctx, 4), 0, 0)
             })
         }
+        if (i.muted && !isOwn) {
+            col.addView(UiUtil.text(ctx, 12f, 0xFFFFD866.toInt(), bold = true).apply {
+                text = "Скрыт: посты не показываются в вашей ленте"; setPadding(0, dp(ctx, 4), 0, 0)
+            })
+        }
+        // «⋯» справа от имени: поделиться профилем, скрыть / показать пользователя (на своём — только «поделиться»).
+        head.addView(
+            UiUtil.text(ctx, 30f, Color.WHITE, bold = true).apply {
+                text = "⋯"; gravity = Gravity.CENTER
+                setShadowLayer(2f, 0f, 1f, 0x99000000.toInt())
+                setPadding(dp(ctx, 10), 0, dp(ctx, 6), dp(ctx, 8))
+                setOnClickListener { anchor -> showProfileMenu(anchor, i) }
+            },
+            UiUtil.lp(UiUtil.WRAP, UiUtil.WRAP).apply { gravity = Gravity.TOP }
+        )
         card.addView(head, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP))
 
         // Остальное — на белом.

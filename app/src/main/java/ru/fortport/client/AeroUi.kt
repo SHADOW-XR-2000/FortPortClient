@@ -194,4 +194,63 @@ object AeroUi {
 
     /** Вью для вставки в разметку (кнопка со стрелкой). */
     fun dropdownView(btn: TextView): View = btn.tag as View
+
+    // ------------------------------------------------------------------ радио, меню, разделитель
+
+    private class RadioDrawable(private val ctx: Context, private val checked: Boolean) : Drawable() {
+        private val d = ctx.resources.displayMetrics.density
+        private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+        private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+        override fun getIntrinsicWidth() = (24 * d).toInt()
+        override fun getIntrinsicHeight() = (24 * d).toInt()
+        override fun draw(c: Canvas) {
+            val b = bounds
+            val cx = b.exactCenterX(); val cy = b.exactCenterY()
+            val r = minOf(b.width(), b.height()) / 2f - 2.5f * d
+            line.strokeWidth = 2.5f * d
+            line.color = if (checked) 0xFF1F78FF.toInt() else 0xFF8A8A8A.toInt()
+            c.drawCircle(cx, cy, r, line)
+            if (checked) { dot.color = 0xFF1F78FF.toInt(); c.drawCircle(cx, cy, r * 0.5f, dot) }
+        }
+        override fun setAlpha(alpha: Int) { line.alpha = alpha; dot.alpha = alpha }
+        override fun setColorFilter(cf: ColorFilter?) { line.colorFilter = cf; dot.colorFilter = cf }
+        @Deprecated("Deprecated in Java")
+        override fun getOpacity() = PixelFormat.TRANSLUCENT
+    }
+
+    /** Aero-радиокнопка (кольцо; выбранная — синяя, с точкой): картинка для ImageView. */
+    fun radioDrawable(ctx: Context, checked: Boolean): Drawable = RadioDrawable(ctx, checked)
+
+    /** Тонкая линия-разделитель в цвет подписи. */
+    fun separator(ctx: Context): View = View(ctx).apply { setBackgroundColor(pal(ctx).panelBorder); alpha = 0.55f }
+
+    /** Выпадающее меню Aero («⋯»): пункты — подпись и действие; открывается под [anchor], по правому краю. */
+    fun popupMenu(ctx: Context, anchor: View, actions: List<Pair<String, () -> Unit>>) {
+        val p = pal(ctx)
+        val col = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            background = grad(p.list1, p.list2, p.listBorder, 1f, 6f, ctx)
+            minimumWidth = dp(ctx, 190)
+            setPadding(dp(ctx, 4), dp(ctx, 4), dp(ctx, 4), dp(ctx, 4))
+        }
+        var ref: PopupWindow? = null
+        actions.forEach { (label, act) ->
+            col.addView(TextView(ctx).apply {
+                text = label; textSize = 15f
+                setTextColor(p.itemText)
+                setPadding(dp(ctx, 12), dp(ctx, 11), dp(ctx, 12), dp(ctx, 11))
+                background = StateListDrawable().apply {
+                    addState(intArrayOf(android.R.attr.state_pressed), grad(p.sel1, p.sel2, p.sel2, 1f, 4f, ctx))
+                    addState(intArrayOf(), android.graphics.drawable.ColorDrawable(0))
+                }
+                setOnClickListener { ref?.dismiss(); act() }
+            })
+        }
+        val pw = PopupWindow(col, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
+            elevation = 12f * ctx.resources.displayMetrics.density
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0))
+        }
+        ref = pw
+        pw.showAsDropDown(anchor, 0, 0, Gravity.END)
+    }
 }
