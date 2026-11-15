@@ -498,7 +498,7 @@ class ProfileController(
         val head = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = UiUtil.royal(ctx)
+            background = AeroUi.panelBackground(ctx)
             setPadding(dp(ctx, 10), dp(ctx, 10), dp(ctx, 10), dp(ctx, 10))
         }
         val avatar = ImageView(ctx).apply {
@@ -511,29 +511,28 @@ class ProfileController(
         api.loadAvatar(avatar, i.avatar)
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         head.addView(col, UiUtil.lp(0, UiUtil.WRAP, 1f).apply { marginStart = dp(ctx, 12) })
-        col.addView(UiUtil.text(ctx, 20f, Color.WHITE, bold = true).apply {
-            text = i.name; setShadowLayer(2f, 0f, 1f, 0x99000000.toInt())
+        col.addView(UiUtil.text(ctx, 20f, AeroUi.titleColor(ctx), bold = true).apply {
+            text = i.name
         })
         if (i.role.badge.isNotBlank()) {
-            col.addView(UiUtil.text(ctx, 12f, 0xFFFFD866.toInt(), bold = true).apply { text = i.role.badge })
+            col.addView(UiUtil.text(ctx, 12f, if (UiUtil.isNight(ctx)) 0xFFFFD866.toInt() else 0xFFA86B00.toInt(), bold = true).apply { text = i.role.badge })
         }
         val status = i.status.ifBlank { b?.status.orEmpty() }
         if (status.isNotBlank()) {
-            col.addView(UiUtil.text(ctx, 14f, Color.WHITE).apply {
-                text = status; setShadowLayer(2f, 0f, 1f, 0x99000000.toInt())
+            col.addView(UiUtil.text(ctx, 14f, AeroUi.labelColor(ctx)).apply {
+                text = status
                 setPadding(0, dp(ctx, 4), 0, 0)
             })
         }
         if (i.muted && !isOwn) {
-            col.addView(UiUtil.text(ctx, 12f, 0xFFFFD866.toInt(), bold = true).apply {
+            col.addView(UiUtil.text(ctx, 12f, if (UiUtil.isNight(ctx)) 0xFFFFD866.toInt() else 0xFFA86B00.toInt(), bold = true).apply {
                 text = "Скрыт: посты не показываются в вашей ленте"; setPadding(0, dp(ctx, 4), 0, 0)
             })
         }
         // «⋯» справа от имени: поделиться профилем, скрыть / показать пользователя (на своём — только «поделиться»).
         head.addView(
-            UiUtil.text(ctx, 30f, Color.WHITE, bold = true).apply {
+            UiUtil.text(ctx, 30f, AeroUi.titleColor(ctx), bold = true).apply {
                 text = "⋯"; gravity = Gravity.CENTER
-                setShadowLayer(2f, 0f, 1f, 0x99000000.toInt())
                 setPadding(dp(ctx, 10), 0, dp(ctx, 6), dp(ctx, 8))
                 setOnClickListener { anchor -> showProfileMenu(anchor, i) }
             },
