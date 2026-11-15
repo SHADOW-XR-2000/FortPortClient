@@ -70,6 +70,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var portSettingsController: PortSettingsController
     private lateinit var nativeInfoPanel: View
     private lateinit var infoTopBar: View
+    private lateinit var profileTopBar: View
+    private lateinit var portTopBar: View
     private lateinit var feedTopBar: View
     private lateinit var nativeSearchPanel: View
     private lateinit var searchTopBar: View
@@ -210,6 +212,8 @@ class MainActivity : AppCompatActivity() {
         portSettingsTopBar = findViewById(R.id.portSettingsTopBar)
         nativeInfoPanel = findViewById(R.id.nativeInfoPanel)
         infoTopBar = findViewById(R.id.infoTopBar)
+        profileTopBar = findViewById(R.id.profileTopBar)
+        portTopBar = findViewById(R.id.portTopBar)
         feedTopBar = findViewById(R.id.feedTopBar)
         nativeSearchPanel = findViewById(R.id.nativeSearchPanel)
         searchTopBar = findViewById(R.id.searchTopBar)
@@ -219,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         // Верхние и нижние панели рисуются в стиле Windows 7 Aero (AeroBar, по dock-panel.html): стеклянный градиент,
         // светлая и тёмная темы. Касается основных панелей, шапок разделов, поста, настроек и панели уведомлений.
         // Шаблоны постов не трогаем (UiUtil.royal).
-        listOf(topNavBar to false, sectionHeader to false, postTopBar to false, settingsTopBar to false, portSettingsTopBar to false, infoTopBar to false, feedTopBar to false, searchTopBar to false,
+        listOf(topNavBar to false, sectionHeader to false, postTopBar to false, settingsTopBar to false, portSettingsTopBar to false, infoTopBar to false, profileTopBar to false, portTopBar to false, feedTopBar to false, searchTopBar to false,
             bottomNavBar to true, notifBottomBar to true).forEach { (bar, atBottom) ->
             bar.background = AeroBar.skin(this, atBottom)
             AeroBar.adaptTexts(bar)
@@ -485,10 +489,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.settingsBackButton).setOnClickListener { onBackPressed() }
         findViewById<View>(R.id.portSettingsBackButton).setOnClickListener { onBackPressed() }
         findViewById<View>(R.id.infoBackButton).setOnClickListener { onBackPressed() }
+        findViewById<View>(R.id.profileBackButton).setOnClickListener { onBackPressed() }
+        findViewById<View>(R.id.portBackButton).setOnClickListener { onBackPressed() }
         findViewById<View>(R.id.feedSearchButton).setOnClickListener { openSearch() }
         findViewById<View>(R.id.searchBackButton).setOnClickListener { onBackPressed() }
         findViewById<View>(R.id.feedSettingsButton).setOnClickListener { feedController.showTabsDialog() }
-        listOf(R.id.postBackButton, R.id.settingsBackButton, R.id.portSettingsBackButton, R.id.infoBackButton, R.id.feedSearchButton, R.id.feedSettingsButton, R.id.searchBackButton).forEach { id ->
+        listOf(R.id.postBackButton, R.id.settingsBackButton, R.id.portSettingsBackButton, R.id.infoBackButton, R.id.profileBackButton, R.id.portBackButton, R.id.feedSearchButton, R.id.feedSettingsButton, R.id.searchBackButton).forEach { id ->
             findViewById<TextView>(id)?.let { AeroButton.style(it) }
         }
         installBarAutoHide(findViewById(R.id.rootLayout))
@@ -496,6 +502,7 @@ class MainActivity : AppCompatActivity() {
             assets.open("ui/icons/setting_icon.png").use { findViewById<ImageView>(R.id.settingsTopIcon).setImageBitmap(BitmapFactory.decodeStream(it)) }
         } catch (e: Exception) { /* иконку положат в assets/ui/icons позже */ }
         findViewById<ImageView>(R.id.portSettingsTopIcon).setImageBitmap(loadAssetIcon("ui/icons/communities_aero.webp"))
+        findViewById<ImageView>(R.id.portTopIcon).setImageBitmap(loadAssetIcon("ui/icons/communities_aero.webp"))
         sectionHeaderAction.setOnClickListener { musicController.pickFromDevice() }
         userMenu = UserMenu(
             activity = this,
@@ -1083,6 +1090,8 @@ class MainActivity : AppCompatActivity() {
         val inSettings = barsVisible && nativeSection == NativeSection.SETTINGS
         val inPortSettings = barsVisible && nativeSection == NativeSection.PORT_SETTINGS
         val inInfo = barsVisible && nativeSection == NativeSection.INFO_PAGE
+        val inProfile = barsVisible && nativeSection == NativeSection.PROFILE
+        val inPort = barsVisible && nativeSection == NativeSection.PORT
         val inFeed = barsVisible && nativeSection == NativeSection.FEED
         val inSearch = barsVisible && nativeSection == NativeSection.SEARCH
         if (section != null) {
@@ -1098,6 +1107,8 @@ class MainActivity : AppCompatActivity() {
         settingsTopBar.visibility = if (inSettings) View.VISIBLE else View.GONE
         portSettingsTopBar.visibility = if (inPortSettings) View.VISIBLE else View.GONE
         infoTopBar.visibility = if (inInfo) View.VISIBLE else View.GONE
+        profileTopBar.visibility = if (inProfile) View.VISIBLE else View.GONE
+        portTopBar.visibility = if (inPort) View.VISIBLE else View.GONE
         feedTopBar.visibility = if (inFeed) View.VISIBLE else View.GONE
         searchTopBar.visibility = if (inSearch) View.VISIBLE else View.GONE
         postTopBar.visibility = if (inPost) View.VISIBLE else View.GONE
