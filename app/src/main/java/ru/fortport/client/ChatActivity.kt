@@ -758,6 +758,17 @@ class ChatActivity : AppCompatActivity() {
         )
     }
 
+    /** Ссылка из сообщения: пост/профиль/порт сайта открываются нативно в главном окне, остальное — снаружи. */
+    private fun openLink(url: String) {
+        if (SiteLinks.parse(url) != null) {
+            startActivity(
+                Intent(this, MainActivity::class.java).setData(Uri.parse(url))
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            )
+            finish()
+        } else openExternal(url)
+    }
+
     private fun openExternal(url: String) {
         try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (e: Exception) {
             Toast.makeText(this, "Не удалось открыть файл", Toast.LENGTH_SHORT).show()
@@ -859,7 +870,8 @@ class ChatActivity : AppCompatActivity() {
                 text.visibility = View.GONE
             } else {
                 text.visibility = View.VISIBLE
-                text.text = m.text
+                text.text = SiteLinks.linkify(m.text, if (mine) 0xFFFFFFFF.toInt() else 0xFF1A73E8.toInt()) { openLink(it) }
+                text.movementMethod = android.text.method.LinkMovementMethod.getInstance()
             }
             val time = m.createdAt?.let { timeFormat.format(it) }.orEmpty()
             meta.text = if (mine) "$time  ${if (m.isRead) "✓✓" else "✓"}" else time
