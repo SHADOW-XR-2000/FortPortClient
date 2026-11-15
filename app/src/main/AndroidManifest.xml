@@ -47,6 +47,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Ссылки fortport.ru из браузера и мессенджеров открываются в приложении -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="fortport.ru" />
+                <data android:scheme="https" android:host="www.fortport.ru" />
+            </intent-filter>
         </activity>
 
         <!-- Причина аварийного закрытия; отдельный процесс, чтобы открыться даже при падении на старте -->
