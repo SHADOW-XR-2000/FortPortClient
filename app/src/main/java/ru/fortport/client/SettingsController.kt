@@ -1,7 +1,6 @@
 package ru.fortport.client
 
 import android.content.Context
-import android.content.res.ColorStateList
 import android.graphics.Outline
 import android.graphics.Typeface
 import android.net.Uri
@@ -65,10 +64,6 @@ class SettingsController(
         const val MAX_UPLOAD = 20L * 1024 * 1024
         const val DEFAULT_MASCOT = MascotSkins.DEFAULT
         const val TOPBAR_DP = 70
-        val TAB_BLUE = 0xFF1F78FF.toInt()
-        val TAB_ACTIVE = 0xFFBEF1FC.toInt()
-        val SAVE_TEAL = 0xFF12D9C0.toInt()
-        val LINE = 0xFF111111.toInt()
         val SEC_KEYS = listOf(
             "showPostsFeed", "showPostsProfile", "showInfoProfile", "anonymousPage", "showFriendsList",
             "showCommunitiesList", "showAudios", "showPhotos", "allowMessagesFrom", "showNSFW"
@@ -252,7 +247,7 @@ class SettingsController(
     private fun showMessage(text: String, retry: Boolean) {
         content.removeAllViews()
         saveButton = null
-        val t = UiUtil.text(activity, 16f, UiUtil.TEXT).apply {
+        val t = UiUtil.text(activity, 16f, AeroUi.labelColor(activity)).apply {
             this.text = text
             gravity = Gravity.CENTER
             setPadding(dp(24), dp(48), dp(24), dp(16))
@@ -283,17 +278,17 @@ class SettingsController(
     }
 
     private fun tabBar(): View {
+        // Вкладки Aero: активная — стеклянная кнопка, остальные — «поля».
         val row = LinearLayout(activity)
         row.orientation = LinearLayout.HORIZONTAL
-        row.setBackgroundColor(TAB_BLUE)
-        row.setPadding(dp(10), dp(10), dp(10), dp(10))
+        row.setPadding(dp(10), dp(12), dp(10), 0)
         listOf(Tab.PROFILE to "Профиль", Tab.SECURITY to "Безопасность", Tab.CUSTOM to "Кастомизация").forEach { (t, title) ->
             val active = t == tab
-            val tv = UiUtil.text(activity, 14f, UiUtil.TEXT, bold = active, maxLines = 1).apply {
+            val tv = UiUtil.text(activity, 14f, if (active) AeroButton.textColor(activity) else AeroUi.labelColor(activity), bold = active, maxLines = 1).apply {
                 text = title
                 gravity = Gravity.CENTER
-                background = UiUtil.rect(if (active) TAB_ACTIVE else UiUtil.WHITE, if (active) UiUtil.BORDER else 0, if (active) 2 else 0, 6, activity)
-                setPadding(dp(4), dp(14), dp(4), dp(14))
+                if (active) AeroButton.style(this) else background = AeroUi.fieldBackground(activity)
+                setPadding(dp(4), dp(12), dp(4), dp(12))
                 setOnClickListener { if (tab != t) { tab = t; render() } }
             }
             row.addView(tv, UiUtil.lp(0, UiUtil.WRAP, 1f).apply { setMargins(dp(4), 0, dp(4), 0) })
@@ -303,17 +298,18 @@ class SettingsController(
 
     private fun bubble(): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
-        background = UiUtil.rect(UiUtil.WHITE, LINE, 3, 18, activity)
+        background = AeroUi.panelBackground(activity)
         setPadding(dp(16), dp(14), dp(16), dp(18))
     }
 
-    private fun title(text: String): TextView = UiUtil.text(activity, 26f, LINE, bold = true).apply {
+    private fun title(text: String): TextView = UiUtil.text(activity, 26f, AeroUi.titleColor(activity), bold = true).apply {
         this.text = text
         gravity = Gravity.CENTER
     }
 
-    private fun caption(text: String): TextView = UiUtil.text(activity, 13f, UiUtil.SUB).apply {
+    private fun caption(text: String): TextView = UiUtil.text(activity, 13f, AeroUi.labelColor(activity)).apply {
         this.text = text
+        alpha = 0.85f
         setPadding(dp(2), dp(12), 0, dp(4))
     }
 
@@ -381,7 +377,7 @@ class SettingsController(
         }
 
         // разделитель между блоками
-        b.addView(View(activity).apply { setBackgroundColor(LINE) }, UiUtil.lp(UiUtil.MATCH, dp(2)).apply { setMargins(0, dp(18), 0, dp(14)) })
+        b.addView(AeroUi.separator(activity), UiUtil.lp(UiUtil.MATCH, dp(1)).apply { setMargins(0, dp(18), 0, dp(14)) })
 
         // --- блок «Маскот» (настройки клиентские: хранятся на устройстве)
         val head = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -420,7 +416,7 @@ class SettingsController(
                 }
                 .setNegativeButton("Отмена", null)
                 .show()
-        }.apply { background = UiUtil.rect(0xFFFF8A80.toInt(), UiUtil.BORDER, 2, 12, activity); textSize = 16f }
+        }.apply { textSize = 16f; setTextColor(if (UiUtil.isNight(activity)) 0xFFFF9A90.toInt() else 0xFFB3261E.toInt()) }
         val applyBtn = button("Применить") {
             prefs.edit().putString("mascot_selected", chosen).apply()
             toast("Маскот выбран: $chosen", true)
@@ -459,16 +455,16 @@ class SettingsController(
         }.apply { textSize = 16f }
         dependent.add(importBtn); b.add(importBtn, 10)
 
-        b.add(UiUtil.text(activity, 13f, UiUtil.TEXT).apply {
+        b.add(UiUtil.text(activity, 13f, AeroUi.labelColor(activity)).apply {
             text = "Внимание! Кастомного маскота видно только вам, это фича на уровне клиента!"
             gravity = Gravity.CENTER
         }, 18)
         applyEnabled(mascotEnabled())
 
         // --- блок «Обновления» (GitHub Releases, см. UpdateManager)
-        b.addView(View(activity).apply { setBackgroundColor(LINE) }, UiUtil.lp(UiUtil.MATCH, dp(2)).apply { setMargins(0, dp(18), 0, dp(14)) })
+        b.addView(AeroUi.separator(activity), UiUtil.lp(UiUtil.MATCH, dp(1)).apply { setMargins(0, dp(18), 0, dp(14)) })
         b.add(title("Обновления").apply { textSize = 24f })
-        b.add(UiUtil.text(activity, 14f, UiUtil.TEXT).apply {
+        b.add(UiUtil.text(activity, 14f, AeroUi.labelColor(activity)).apply {
             text = "Установлена версия ${UpdateManager.versionLabel(activity)}"
             gravity = Gravity.CENTER
         }, 8)
@@ -494,9 +490,9 @@ class SettingsController(
     private fun infoButton(): View {
         val icon = try { activity.assets.open("ui/icons/info.png").use { android.graphics.BitmapFactory.decodeStream(it) } } catch (e: Exception) { null }
         val v: View = if (icon != null) ImageView(activity).apply { setImageBitmap(icon); scaleType = ImageView.ScaleType.FIT_CENTER }
-        else UiUtil.text(activity, 18f, LINE, bold = true).apply {
+        else UiUtil.text(activity, 18f, AeroButton.textColor(activity), bold = true).apply {
             text = "i"; gravity = Gravity.CENTER
-            background = UiUtil.rect(UiUtil.WHITE, LINE, 2, 18, activity)
+            AeroButton.style(this, 18f)
         }
         v.setOnClickListener {
             AlertDialog.Builder(activity)
@@ -624,11 +620,9 @@ class SettingsController(
         }
     }
 
-    private fun input(value: String, multiline: Boolean, onChange: (String) -> Unit): EditText = EditText(activity).apply {
+    private fun input(value: String, multiline: Boolean, onChange: (String) -> Unit): EditText = AeroUi.input(EditText(activity)).apply {
         setText(value)
         textSize = 16f
-        setTextColor(UiUtil.TEXT)
-        background = UiUtil.rect(UiUtil.WHITE, LINE, 2, 10, activity)
         setPadding(dp(12), dp(10), dp(12), dp(10))
         if (multiline) {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
@@ -654,11 +648,9 @@ class SettingsController(
      *  - при уходе из поля дата приводится к виду «дд.мм.гггг» (7.1.1990 → 07.01.1990, 07011990 → 07.01.1990).
      */
     private fun dateInput(value: String, onChange: (String) -> Unit): EditText {
-        val et = EditText(activity).apply {
+        val et = AeroUi.input(EditText(activity)).apply {
             setText(value)
             textSize = 16f
-            setTextColor(UiUtil.TEXT)
-            background = UiUtil.rect(UiUtil.WHITE, LINE, 2, 10, activity)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             setSingleLine(true)
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
@@ -708,10 +700,9 @@ class SettingsController(
 
     private fun toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit): LinearLayout {
         val row = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val tv = UiUtil.text(activity, 15f, UiUtil.TEXT).apply { text = label }
-        val cb = CheckBox(activity).apply {
+        val tv = UiUtil.text(activity, 15f, AeroUi.labelColor(activity)).apply { text = label }
+        val cb = AeroUi.checkBox(activity, "").apply {
             isChecked = checked
-            buttonTintList = ColorStateList.valueOf(LINE)
             setOnCheckedChangeListener { _, v -> onChange(v) }
         }
         row.addView(tv, UiUtil.lp(0, UiUtil.WRAP, 1f))
@@ -720,42 +711,38 @@ class SettingsController(
         return row
     }
 
-    /** Выпадающий список (радио-выбор в диалоге). */
+    /** Выпадающий список Aero (кнопка со стрелкой и всплывающий список). [radio] оставлен для совместимости вызовов. */
+    @Suppress("UNUSED_PARAMETER")
     private fun dropdown(
         dialogTitle: String, options: List<String>, current: Int, radio: Boolean = true, onPick: (Int) -> Unit
-    ): TextView {
+    ): View {
         var cur = current
-        val tv = UiUtil.text(activity, 16f, UiUtil.TEXT)
-        fun refresh() { tv.text = (options.getOrNull(cur) ?: "Вариант $cur") + "  ▾" }
-        tv.background = UiUtil.rect(UiUtil.WHITE, LINE, 2, 10, activity)
-        tv.setPadding(dp(12), dp(12), dp(12), dp(12))
-        refresh()
-        tv.setOnClickListener {
-            if (!tv.isEnabled) return@setOnClickListener
-            AlertDialog.Builder(activity)
-                .setTitle(dialogTitle)
-                .setSingleChoiceItems(options.toTypedArray(), cur) { dlg, which ->
-                    cur = which; refresh(); onPick(which); dlg.dismiss()
-                }
-                .setNegativeButton("Отмена", null)
-                .show()
+        var ref: TextView? = null
+        fun label() = options.getOrNull(cur) ?: "Вариант $cur"
+        val btn = AeroUi.dropdown(activity, { options }, { cur }) { i ->
+            cur = i
+            ref?.text = label()
+            onPick(i)
         }
-        return tv
+        ref = btn
+        btn.text = label()
+        btn.textSize = 16f
+        return AeroUi.dropdownView(btn)
     }
 
-    private fun button(text: String, onClick: () -> Unit): TextView = UiUtil.text(activity, 20f, UiUtil.WHITE, bold = true).apply {
+    private fun button(text: String, onClick: () -> Unit): TextView = UiUtil.text(activity, 20f, AeroButton.textColor(activity), bold = true).apply {
         this.text = text
         gravity = Gravity.CENTER
-        background = UiUtil.rect(SAVE_TEAL, LINE, 2, 14, activity)
+        AeroButton.style(this)
         setOnClickListener { if (isEnabled) onClick() }
     }
 
     private fun imageCell(kind: Img, label: String): FrameLayout {
         val cell = FrameLayout(activity)
-        cell.background = UiUtil.rect(0xFFEEEEEE.toInt(), LINE, 2, 10, activity)
+        cell.background = AeroUi.fieldBackground(activity)
         cell.clipToOutline = true
         cell.outlineProvider = object : ViewOutlineProvider() {
-            override fun getOutline(view: View, outline: Outline) { outline.setRoundRect(0, 0, view.width, view.height, dp(10).toFloat()) }
+            override fun getOutline(view: View, outline: Outline) { outline.setRoundRect(0, 0, view.width, view.height, dp(5).toFloat()) }
         }
         val iv = ImageView(activity).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         cell.addView(iv, FrameLayout.LayoutParams(UiUtil.MATCH, UiUtil.MATCH))
@@ -941,7 +928,7 @@ class SettingsController(
         hideTask?.let { pill.removeCallbacks(it) }
         pill.animate().cancel()
         pill.text = text
-        pill.background = UiUtil.rect(if (good) 0xFF1B8F5A.toInt() else 0xFFC0392B.toInt(), LINE, 2, 22, activity)
+        pill.background = UiUtil.rect(if (good) 0xFF1B8F5A.toInt() else 0xFFC0392B.toInt(), 0x99FFFFFF.toInt(), 1, 22, activity)
         pill.alpha = 0f
         pill.visibility = View.VISIBLE
         pill.animate().alpha(1f).setDuration(150).start()
