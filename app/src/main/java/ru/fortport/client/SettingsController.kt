@@ -43,8 +43,12 @@ import java.util.Calendar
  *  - GET /api/users/cust/{id} — customBackground и пять флагов звуков;
  *  - GET /api/session/bootstrap → mascot{handHolding,…}.
  *
- * Запись: в логе её нет — адреса и методы собраны в [Ep] и НЕ ПРОВЕРЕНЫ. Когда будет лог
- * нажатия «Сохранить» на сайте, достаточно поправить [Ep] (и при необходимости форму тела).
+ * Запись вкладки «Профиль» — по логу сайта: POST /api/users/update/bio, multipart: profileBackground и profilePicture
+ * (файл или пустое поле, если не менялись), username, description, status, date_of_birth («гггг-мм-дд»), home_country,
+ * education, workplace, hobbies, fandoms, religion → {success, updated[], profilePicture, profileBackground}.
+ * Запись «Безопасности» и «Кастомизации» в логах пока не снималась — адреса и методы собраны в [Ep] и НЕ ПРОВЕРЕНЫ.
+ *
+ * Значок профиля: кнопка между картинками и именем открывает окно выбора ([Badges]).
  */
 class SettingsController(
     private val activity: AppCompatActivity,
@@ -70,6 +74,12 @@ class SettingsController(
             "showCommunitiesList", "showAudios", "showPhotos", "allowMessagesFrom", "showNSFW"
         )
         val SND_KEYS = listOf("notificationSound", "chatMessageSound", "postSentSound", "friendOnlineSound", "friendRequestSound")
+        /** Поля формы «Профиль» на проводе (snake_case, порядок как в логе сайта). */
+        val BIO_WIRE = listOf(
+            "username" to "username", "description" to "description", "status" to "status", "dateOfBirth" to "date_of_birth",
+            "homeCountry" to "home_country", "education" to "education", "workplace" to "workplace",
+            "hobbies" to "hobbies", "fandoms" to "fandoms", "religion" to "religion"
+        )
         val BIO_KEYS = listOf(
             "username", "status", "description", "dateOfBirth", "homeCountry", "education",
             "workplace", "hobbies", "fandoms", "religion"
@@ -81,11 +91,8 @@ class SettingsController(
     /** Адреса сохранения. НЕ ПРОВЕРЕНЫ (в логе только GET) — поправить по логу «Сохранить». */
     private class Ep(val method: String, val path: String)
     private object Endpoints {
-        fun bio(id: String) = Ep("PUT", "/api/users/bio/$id")
         fun seq(id: String) = Ep("PUT", "/api/users/seq/$id")
         fun cust(id: String) = Ep("PUT", "/api/users/cust/$id")
-        val avatar = Ep("POST", "/api/users/avatar")
-        val profileBg = Ep("POST", "/api/users/profile-background")
         val feedBg = Ep("POST", "/api/users/custom-background")
         const val FILE_FIELD = "file"
     }
@@ -110,6 +117,8 @@ class SettingsController(
     private var profileBgPath = ""
     private var feedBgPath = ""
     private var handHoldingServer = true
+    /** Надетый значок (GET /api/users/badges); null — без значка. */
+    private var badge: BadgeItem? = null
     private val pendingImg = HashMap<Img, Uri>()
 
     // --- виды
@@ -171,6 +180,7 @@ class SettingsController(
             val newSec = LinkedHashMap<String, Int>()
             val newSnd = LinkedHashMap<String, Int>()
             var avatar = ""; var pBg = ""; var fBg = ""; var hand = true
+            var eqBadge: BadgeItem? = null
             try {
                 when (api.ensureUserId()) {
                     1 -> auth = true
@@ -198,6 +208,19 @@ class SettingsController(
                                     hand = JSONObject(rb.body).optJSONObject("mascot")?.optBoolean("handHolding", true) ?: true
                                 }
                             } catch (e: Exception) { Log.w(TAG, "bootstrap", e) }
+                            // Надетый значок для кнопки в «Профиле»; ошибка здесь не мешает показу страницы.
+                            try {
+                                val rbd = api.get("/api/users/badges")
+                                if (rbd.code == 200) {
+                                    val a = JSONObject(rbd.body).optJSONArray("badges")
+                                    if (a != null) for (i in 0 until a.length()) {
+                                        val o = a.optJSONObject(i) ?: continue
+                                        if (o.optBoolean("equipped")) {
+                                            eqBadge = BadgeItem(o.optLong("id"), api.str(o, "name"), api.str(o, "imagePath"), api.str(o, "flavourText"), 0, true, true)
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) { Log.w(TAG, "badges", e) }
                             ok = true
                         }
                     }
@@ -216,6 +239,7 @@ class SettingsController(
                         snd.clear(); snd.putAll(newSnd)
                         avatarPath = avatar; profileBgPath = pBg; feedBgPath = fBg
                         handHoldingServer = hand
+                        badge = eqBadge
                         bio["dateOfBirth"] = dobToDisplay(bio["dateOfBirth"].orEmpty())
                         render()
                     }
@@ -305,6 +329,9 @@ class SettingsController(
         cells.addView(imageCell(Img.AVATAR, "Аватар"), UiUtil.lp(dp(120), dp(120)))
         cells.addView(imageCell(Img.PROFILE_BG, "Фон профиля"), UiUtil.lp(0, dp(120), 1f).apply { leftMargin = dp(12) })
         b.add(cells, 14)
+
+        // Значок: кнопка по ширине как поле имени, открывает окно со значками.
+        b.add(badgeButton(), 12)
 
         b.add(caption("Имя")); b.add(input(bio["username"].orEmpty(), false) { bio["username"] = it })
         b.add(caption("Статус")); b.add(input(bio["status"].orEmpty(), false) { bio["status"] = it })
@@ -484,6 +511,119 @@ class SettingsController(
 
     // ------------------------------------------------------------------ элементы формы
 
+    /** Кнопка значка: иконка надетого значка (или заглушка) и его название; тап открывает окно выбора. */
+    private fun badgeButton(): View {
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = AeroUi.fieldBackground(activity)
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+            minimumHeight = dp(48)
+            setOnClickListener { showBadgePicker() }
+        }
+        val icon = ImageView(activity).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+        row.addView(icon, LinearLayout.LayoutParams(dp(34), dp(34)))
+        val cur = badge
+        api.loadImage(icon, if (cur != null) Badges.imageUrl(cur.imagePath) else "/ui/icons/badge_picker.webp", 128)
+        row.addView(TextView(activity).apply {
+            text = cur?.name ?: "Выбрать значок"
+            textSize = 16f
+            setTextColor(AeroUi.titleColor(activity))
+        }, LinearLayout.LayoutParams(0, UiUtil.WRAP, 1f).apply { marginStart = dp(12) })
+        row.addView(TextView(activity).apply { text = "›"; textSize = 22f; setTextColor(AeroUi.labelColor(activity)) })
+        return row
+    }
+
+    /** Окно «Значки»: «Без значка», купленные (тап — надеть/снять) и каталог (тап — купить за CD). */
+    private fun showBadgePicker() {
+        val dlg = AeroDialog(activity, "Значки")
+        val info = UiUtil.text(activity, 15f, AeroUi.labelColor(activity)).apply {
+            text = "Загрузка…"; gravity = Gravity.CENTER; setPadding(dp(8), dp(16), dp(8), dp(16))
+        }
+        dlg.body.addView(info, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP))
+        dlg.show()
+
+        fun finish(equipped: BadgeItem?) {
+            badge = equipped
+            dlg.dismiss()
+            if (started && tab == Tab.PROFILE) render()
+        }
+        fun fill(list: List<BadgeItem>) {
+            dlg.body.removeAllViews()
+            val current = list.firstOrNull { it.equipped }
+            fun row(item: BadgeItem?, active: Boolean, click: () -> Unit): View {
+                val r = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                    background = AeroUi.fieldBackground(activity)
+                    setPadding(dp(10), dp(8), dp(12), dp(8))
+                    setOnClickListener { click() }
+                }
+                r.addView(ImageView(activity).apply { setImageDrawable(AeroUi.radioDrawable(activity, active)) }, LinearLayout.LayoutParams(dp(26), dp(26)))
+                val ic = ImageView(activity).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+                r.addView(ic, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(10) })
+                if (item != null) api.loadImage(ic, Badges.imageUrl(item.imagePath), 128)
+                val col = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+                col.addView(UiUtil.text(activity, 16f, AeroUi.titleColor(activity), bold = true).apply { text = item?.name ?: "Без значка" })
+                if (item != null && item.flavour.isNotBlank()) col.addView(UiUtil.text(activity, 12f, AeroUi.labelColor(activity)).apply { text = item.flavour; alpha = 0.85f })
+                r.addView(col, LinearLayout.LayoutParams(0, UiUtil.WRAP, 1f).apply { marginStart = dp(10) })
+                if (item != null && !item.owned) {
+                    r.addView(UiUtil.text(activity, 14f, AeroUi.titleColor(activity), bold = true).apply { text = "${item.price} CD" })
+                    r.alpha = 0.9f
+                }
+                return r
+            }
+            fun add(v: View) = dlg.body.addView(v, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP).apply { topMargin = dp(8) })
+            add(row(null, current == null) {
+                if (current == null) { dlg.dismiss(); return@row }
+                toggle(dlg, current) { finish(null) }
+            })
+            list.forEach { b ->
+                add(row(b, b.equipped) {
+                    if (b.owned) toggle(dlg, b) { eq -> finish(if (eq) b else null) }
+                    else AlertDialog.Builder(activity)
+                        .setMessage("Купить значок «${b.name}» за ${b.price} CD?")
+                        .setNegativeButton("Отмена", null)
+                        .setPositiveButton("Купить") { _, _ ->
+                            api.io.execute {
+                                val r = Badges.buy(api, b.id)
+                                val fresh = if (r.ok) Badges.load(api) else null
+                                activity.runOnUiThread {
+                                    if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                                    when {
+                                        r.authLost -> onAuthLost()
+                                        !r.ok -> toast(r.error, false)
+                                        fresh != null -> { toast("Значок куплен", true); if (dlg.dialog.isShowing) fill(fresh) }
+                                    }
+                                }
+                            }
+                        }.show()
+                })
+            }
+        }
+        api.io.execute {
+            val list = Badges.load(api)
+            activity.runOnUiThread {
+                if (activity.isFinishing || activity.isDestroyed || !dlg.dialog.isShowing) return@runOnUiThread
+                if (list == null) info.text = "Не удалось загрузить значки" else fill(list)
+            }
+        }
+    }
+
+    /** Надеть/снять значок (сервер переключает); [done] получает итоговое состояние «надет». */
+    private fun toggle(dlg: AeroDialog, item: BadgeItem, done: (Boolean) -> Unit) {
+        api.io.execute {
+            val r = Badges.toggle(api, item.id)
+            activity.runOnUiThread {
+                if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                when {
+                    r.authLost -> onAuthLost()
+                    r.ok -> done(r.equipped)
+                    else -> toast(r.error, false)
+                }
+            }
+        }
+    }
+
     private fun input(value: String, multiline: Boolean, onChange: (String) -> Unit): EditText = EditText(activity).apply {
         setText(value)
         textSize = 16f
@@ -652,25 +792,24 @@ class SettingsController(
         if (saving || !loaded) return
         val me = api.userId
         val currentTab = tab
-        var bioJson: JSONObject? = null
+        var dobServer = ""
         when (currentTab) {
             Tab.PROFILE -> {
                 if (bio["username"].orEmpty().isBlank()) { toast("Имя не может быть пустым", false); return }
                 val dob = dobToServer(bio["dateOfBirth"].orEmpty())
                 if (dob == null) { toast("Проверьте дату рождения (дд.мм.гггг)", false); return }
-                bioJson = JSONObject().also { j ->
-                    BIO_KEYS.forEach { k -> j.put(k, if (k == "dateOfBirth") dob else bio[k].orEmpty()) }
-                }
+                dobServer = dob
             }
             else -> {}
         }
         val secJson = if (currentTab == Tab.SECURITY) JSONObject().also { j -> SEC_KEYS.forEach { k -> j.put(k, sec[k] ?: 0) } } else null
         val custJson = if (currentTab == Tab.CUSTOM) JSONObject().also { j -> SND_KEYS.forEach { k -> j.put(k, snd[k] ?: 1) } } else null
         val uploads: List<Pair<Img, Ep>> = when (currentTab) {
-            Tab.PROFILE -> listOf(Img.AVATAR to Endpoints.avatar, Img.PROFILE_BG to Endpoints.profileBg)
+            Tab.PROFILE -> emptyList() // аватар и фон уходят в той же форме, что и поля профиля
             Tab.CUSTOM -> listOf(Img.FEED_BG to Endpoints.feedBg)
             Tab.SECURITY -> emptyList()
         }.filter { pendingImg.containsKey(it.first) }
+        val bioImages = if (currentTab == Tab.PROFILE) listOf(Img.AVATAR, Img.PROFILE_BG).filter { pendingImg.containsKey(it) } else emptyList()
         val pendingSnapshot = HashMap(pendingImg)
 
         saving = true
@@ -688,14 +827,16 @@ class SettingsController(
                     if (r.first !in 200..299) { err = describe(r.first, r.second, "Не удалось загрузить картинку"); break }
                 }
                 if (err == null && !auth) {
-                    val (ep, json) = when (currentTab) {
-                        Tab.PROFILE -> Endpoints.bio(me) to bioJson!!
-                        Tab.SECURITY -> Endpoints.seq(me) to secJson!!
-                        Tab.CUSTOM -> Endpoints.cust(me) to custJson!!
+                    val r = if (currentTab == Tab.PROFILE) saveBioForm(dobServer, pendingSnapshot[Img.AVATAR], pendingSnapshot[Img.PROFILE_BG])
+                    else {
+                        val (ep, json) = if (currentTab == Tab.SECURITY) Endpoints.seq(me) to secJson!! else Endpoints.cust(me) to custJson!!
+                        api.send(ep.method, ep.path, json.toString()).let { it.code to it.body }
                     }
-                    val r = api.send(ep.method, ep.path, json.toString())
-                    if (r.code == 401) auth = true
-                    else if (r.code !in 200..299) err = describe(r.code, r.body, "Не удалось сохранить")
+                    if (r.first == 401) auth = true
+                    else if (r.first !in 200..299) err = describe(r.first, r.second, "Не удалось сохранить")
+                    else if (currentTab == Tab.PROFILE && try { JSONObject(r.second).optBoolean("success", true) } catch (e: Exception) { true } == false) {
+                        err = describe(r.first, r.second, "Не удалось сохранить")
+                    }
                 }
                 if (err == null && !auth) {
                     // Пути картинок после загрузки берём с сервера (ошибка здесь не критична).
@@ -718,11 +859,11 @@ class SettingsController(
                     err != null -> toast(err!!, false)
                     else -> {
                         // В тестовом режиме файл не сохраняется — оставляем выбранную картинку на экране.
-                        if (!api.isDemo) uploads.forEach { pendingImg.remove(it.first) }
+                        if (!api.isDemo) { uploads.forEach { pendingImg.remove(it.first) }; bioImages.forEach { pendingImg.remove(it) } }
                         freshBio?.let { avatarPath = api.str(it, "profilePicture"); profileBgPath = api.str(it, "profileBackground") }
                         freshCust?.let { feedBgPath = api.str(it, "customBackground") }
                         toast("Настройки сохранены", true)
-                        if (uploads.isNotEmpty() && tab == currentTab) render()
+                        if ((uploads.isNotEmpty() || bioImages.isNotEmpty()) && tab == currentTab) render()
                     }
                 }
             }
@@ -732,6 +873,26 @@ class SettingsController(
     private fun describe(code: Int, body: String, base: String): String {
         val msg = try { JSONObject(body).let { it.optString("error", it.optString("message", "")) } } catch (e: Exception) { "" }
         return if (msg.isNotBlank()) "$base: $msg" else "$base (код $code)"
+    }
+
+    /**
+     * Сохранение вкладки «Профиль» — форма сайта (лог): POST /api/users/update/bio, multipart. Картинки — файлом в поле
+     * profilePicture / profileBackground, если выбраны новые, иначе пустое поле (сервер оставляет прежние). Вызывать из io-потока.
+     */
+    private fun saveBioForm(dob: String, avatar: Uri?, background: Uri?): Pair<Int, String> {
+        val cr = activity.contentResolver
+        val mb = MultipartBody.Builder().setType(MultipartBody.FORM)
+        for ((field, uri) in listOf("profileBackground" to background, "profilePicture" to avatar)) {
+            if (uri == null) { mb.addFormDataPart(field, ""); continue }
+            val bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: return 0 to ""
+            if (bytes.size > MAX_UPLOAD) return 413 to "{\"error\":\"Файл слишком большой\"}"
+            val mime = cr.getType(uri) ?: "image/jpeg"
+            val ext = when (mime) { "image/png" -> "png"; "image/gif" -> "gif"; "image/webp" -> "webp"; else -> "jpg" }
+            mb.addFormDataPart(field, "upload.$ext", bytes.toRequestBody(mime.toMediaType()))
+        }
+        for ((key, wire) in BIO_WIRE) mb.addFormDataPart(wire, if (key == "dateOfBirth") dob else bio[key].orEmpty())
+        val r = api.sendMultipart("POST", "/api/users/update/bio", mb.build())
+        return r.code to r.body
     }
 
     /** multipart-загрузка; (код, тело). Вызывать из io-потока. */

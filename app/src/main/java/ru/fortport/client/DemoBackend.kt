@@ -230,6 +230,7 @@ class DemoBackend(context: Context) {
     private fun userView(id: Long, withRelations: Boolean = false): JSONObject? {
         val u = findUser(id) ?: return null
         val o = JSONObject(u.toString())
+        if (id != ME) o.put("isMuted", id in muted())
         if (withRelations) {
             if (id == ME) { o.put("friends", db.getJSONArray("friends")); o.put("pending", db.getJSONArray("pending")) }
             else { o.put("friends", JSONArray()); o.put("pending", if (ids(db.getJSONArray("outgoing")).contains(id)) arr(ME) else JSONArray()) }
@@ -370,16 +371,84 @@ class DemoBackend(context: Context) {
 
         // --- пользователи
         if (p == "/api/users" && method == "GET") return ok(JSONArray().also { a -> (0 until users().length()).forEach { a.put(users().getJSONObject(it)) } })
-        if (p == "/api/users/feedlist") return ok(obj("feeds" to JSONArray()
-            .put(feed("Лента - новое", "feed", "new")).put(feed("Друзья", "friends", "new"))
-            .put(feed("Порты", "ports", "new")).put(feed("Лента - горячее", "feed", "hot"))))
+        if (p == "/api/users/feedlist") {
+            val feeds = feedsDb()
+            fun row(src: JSONObject, dst: JSONObject) {
+                dst.put("settingName", src.optString("settingName")).put("filterType", src.optString("filterType", "feed")).put("sortType", src.optString("sortType", "new"))
+                    .put("timerange", src.opt("timerange") ?: JSONObject.NULL)
+                    .put("showNsfw", src.optInt("showNsfw")).put("showSpoiler", src.optInt("showSpoiler", 1))
+                    .put("showMuted", src.optInt("showMuted", 1)).put("showAnonymous", src.optInt("showAnonymous", 1))
+            }
+            when (method) {
+                "POST" -> {
+                    if (body.optString("settingName").isBlank()) return fail(400, "Введите название")
+                    val now = System.currentTimeMillis() / 1000
+                    val created = obj("settingId" to nextId(), "userId" to ME, "feedOrder" to ((0 until feeds.length()).maxOfOrNull { feeds.getJSONObject(it).optInt("feedOrder") } ?: 0) + 1,
+                        "createdAt" to now, "updatedAt" to now)
+                    row(body, created)
+                    feeds.put(created)
+                    return ok(obj("feed" to created))
+                }
+                "PUT" -> {
+                    val f = (0 until feeds.length()).map { feeds.getJSONObject(it) }.firstOrNull { it.optLong("settingId") == body.optLong("settingId") }
+                        ?: return fail(404, "Лента не найдена")
+                    if (body.optString("settingName").isBlank()) return fail(400, "Введите название")
+                    row(body, f); f.put("updatedAt", System.currentTimeMillis() / 1000)
+                    return ok(obj("feed" to f))
+                }
+                "DELETE" -> {
+                    val keep = JSONArray()
+                    (0 until feeds.length()).map { feeds.getJSONObject(it) }.filter { it.optLong("settingId") != body.optLong("settingId") }.forEach { keep.put(it) }
+                    db.put("feeds", keep)
+                    return success()
+                }
+            }
+            return ok(obj("feeds" to feeds))
+        }
         if (p == "/api/users/search") {
             val s = q["q"].orEmpty().lowercase(Locale.ROOT)
             return ok(JSONArray().also { a -> (0 until users().length()).map { users().getJSONObject(it) }.filter { it.optLong("id") != ME && it.optString("username").lowercase(Locale.ROOT).contains(s) }.forEach { a.put(it) } })
         }
-        if (p == "/api/users/mute") return success()
+        if (p == "/api/users/mute") {
+            val target = body.optLong("targetUserId")
+            if (target == 0L || findUser(target) == null) return fail(404, "Пользователь не найден")
+            val list = muted()
+            if (method == "DELETE") list.remove(target) else if (target !in list) list.add(target)
+            db.put("muted", toArr(list))
+            return ok(obj("success" to true, "message" to if (method == "DELETE") "User unmuted" else "User muted"))
+        }
+
+        // --- значки (настройки профиля)
+        if (p == "/api/users/badges" && method == "GET") {
+            val owned = ids(db.optJSONArray("badgesOwned") ?: JSONArray()); val eq = db.optLong("badgeEquipped")
+            return ok(obj("badges" to JSONArray().also { a -> owned.forEach { id -> BADGES.firstOrNull { it.id == id }?.let { b ->
+                a.put(obj("id" to id, "name" to b.name, "imagePath" to b.path, "flavourText" to b.flavour, "equipped" to (id == eq)))
+            } } }))
+        }
+        if (p == "/api/purchases/badges" && method == "GET") {
+            val owned = ids(db.optJSONArray("badgesOwned") ?: JSONArray())
+            return ok(obj("items" to JSONArray().also { a -> BADGES.forEach { b ->
+                a.put(obj("id" to b.id, "name" to b.name, "flavourText" to b.flavour, "imagePath" to b.path, "price" to 12, "owned" to (b.id in owned)))
+            } }))
+        }
+        m("/api/users/badges/(\\d+)")?.let { g ->
+            val id = g[1].toLong()
+            if (method != "POST") return fail(405, "Метод не поддерживается")
+            if (id !in ids(db.optJSONArray("badgesOwned") ?: JSONArray())) return fail(403, "Значок не куплен")
+            val equipped = db.optLong("badgeEquipped") != id
+            db.put("badgeEquipped", if (equipped) id else 0L)
+            return ok(obj("success" to true, "equipped" to equipped, "badgeId" to id))
+        }
+        m("/api/purchases/badges/(\\d+)")?.let { g ->
+            val id = g[1].toLong()
+            if (BADGES.none { it.id == id }) return fail(404, "Значок не найден")
+            val owned = ids(db.optJSONArray("badgesOwned") ?: JSONArray())
+            if (id in owned) return fail(400, "Значок уже куплен")
+            owned.add(id); db.put("badgesOwned", toArr(owned))
+            return success()
+        }
         m("/api/users/(\\d+)/commIds")?.let { return ok(comms { c -> c.getJSONArray("subscribers").let { s -> ids(s).contains(ME) } }) }
-        m("/api/users/(\\d+)/friends")?.let { g -> return ok(JSONArray().also { a -> if (g[1].toLong() == ME) ids(db.getJSONArray("friends")).forEach { a.put(obj("id" to it)) } }) }
+        m("/api/users/(\\d+)/friends")?.let { g -> return ok(JSONArray().also { a -> if (g[1].toLong() == ME) ids(db.getJSONArray("friends")).forEach { a.put(friendLite(it) ?: obj("id" to it)) } }) }
         m("/api/users/(\\d+)/communities")?.let { g -> val id = g[1].toLong(); return ok(comms { c -> ids(c.getJSONArray("subscribers")).contains(id) }) }
         m("/api/users/(\\d+)/pinned-post")?.let { return ok(obj()) }
         m("/api/users/(\\d+)")?.let { g -> return userView(g[1].toLong(), true)?.let { ok(it) } ?: fail(404, "Пользователь не найден") }
@@ -411,6 +480,7 @@ class DemoBackend(context: Context) {
             db.put("friends", toArr(friends)); db.put("pending", toArr(pending)); db.put("outgoing", toArr(out))
             return success()
         }
+        if (Regex("/api/chats/messages/.+").matches(p) && method == "POST") return success()
         if (p == "/api/chats/create") return fail(501, "Чаты недоступны в тестовом режиме")
 
         // --- порты
@@ -527,9 +597,28 @@ class DemoBackend(context: Context) {
         return fail(404, "Тестовый режим: $method $p не реализовано")
     }
 
-    private fun feed(name: String, type: String, sort: String) = obj(
-        "settingName" to name, "filterType" to type, "sortType" to sort, "timerange" to null, "showNsfw" to 0, "showAnonymous" to 1, "showMuted" to 1
+    /** Ленты пользователя (GET/POST/PUT/DELETE /api/users/feedlist); при первом обращении — четыре вкладки по умолчанию, как на сайте. */
+    private fun feedsDb(): JSONArray = db.optJSONArray("feeds") ?: JSONArray().also { a ->
+        listOf(
+            Triple("Лента - новое", "feed", "new"), Triple("Лента - качественное", "feed", "quality"),
+            Triple("Порты - горячее", "ports", "hot"), Triple("Друзья - новое", "friends", "new")
+        ).forEachIndexed { i, (n, t, so) ->
+            a.put(obj("settingId" to 7000L + i, "userId" to ME, "feedOrder" to i + 1, "settingName" to n, "filterType" to t, "sortType" to so,
+                "showNsfw" to 0, "showSpoiler" to 1, "showMuted" to 1, "showAnonymous" to 1, "createdAt" to 1790093909L, "updatedAt" to 1790093909L))
+        }
+        db.put("feeds", a)
+    }
+
+    private class DemoBadge(val id: Long, val name: String, val path: String, val flavour: String)
+    private val BADGES = listOf(
+        DemoBadge(5, "Повязка Жеки", "patch", "Защищает от прилетающих кирпичей!"),
+        DemoBadge(6, "Диск", "cd", "Я потратил диски, чтобы купить диски"),
+        DemoBadge(7, "Мармеладный человек", "guy", "Чилловый чувак, на одной волне с другими мармеладными людьми"),
+        DemoBadge(8, "Аноним", "anon", "Никто не знает кто он, даже он сам"),
+        DemoBadge(9, "Кирпич", "brick", "Универсальное оружие, которое контрится только повязкой на глаз")
     )
+
+    private fun muted(): MutableList<Long> = ids(db.optJSONArray("muted") ?: JSONArray())
 
     private fun comms(filter: (JSONObject) -> Boolean): JSONArray = JSONArray().also { out ->
         db.getJSONArray("communities").let { a -> (0 until a.length()).map { a.getJSONObject(it) }.filter(filter).forEach { out.put(communityView(it)) } }
@@ -552,7 +641,7 @@ class DemoBackend(context: Context) {
         val users = ids(body.optJSONArray("userIds") ?: JSONArray())
         val comms = ids(body.optJSONArray("communityIds") ?: JSONArray())
         val own = q["userId"]?.toLongOrNull(); val comm = q["communityId"]?.toLongOrNull()
-        if (own != null) list = list.filter { it.optLong("userId") == own && !it.optBoolean("isAnonymous") }
+        if (own != null) list = if (own in muted()) emptyList() else list.filter { it.optLong("userId") == own && !it.optBoolean("isAnonymous") }
         else if (comm != null) list = list.filter { it.optString("community") == comm.toString() }
         else {
             when (q["filter"]) {
@@ -562,6 +651,7 @@ class DemoBackend(context: Context) {
             }
             if (q["shownsfw"] != "1" && db.getJSONObject("seq").optInt("showNSFW") != 1) list = list.filter { !it.optBoolean("nsfw") }
             if (q["showanon"] == "0") list = list.filter { !it.optBoolean("isAnonymous") }
+            if (q["filtermuted"] == "0") { val mu = muted(); list = list.filter { it.optLong("userId") !in mu } }
         }
         val sortNew = (q["sort"] ?: "new") == "new"
         val page: List<JSONObject>
@@ -571,7 +661,8 @@ class DemoBackend(context: Context) {
                 .filter { before == null || it.optLong("createdMs") / 1000 < before }.take(PAGE)
         } else {
             val offset = q["offset"]?.toIntOrNull() ?: 0
-            page = list.sortedByDescending { it.getJSONArray("likes").length() - it.getJSONArray("dislikes").length() }.drop(offset).take(PAGE)
+            page = (if (q["sort"] == "old") list.sortedBy { it.optLong("createdMs") }
+                else list.sortedByDescending { it.getJSONArray("likes").length() - it.getJSONArray("dislikes").length() }).drop(offset).take(PAGE)
         }
         return ok(obj("posts" to JSONArray().also { a -> page.forEach { a.put(postView(it)) } }))
     }
@@ -623,6 +714,21 @@ class DemoBackend(context: Context) {
                 c.put("createdMs", System.currentTimeMillis())
                 post.getJSONArray("comments").put(c)
                 ok(obj("success" to true, "id" to c.optLong("id")))
+            }
+            p == "/api/users/update/bio" && method == "POST" -> {
+                // Форма настроек профиля (лог сайта): username, status, description, date_of_birth, home_country, education,
+                // workplace, hobbies, fandoms, religion + файлы profilePicture / profileBackground (в тестовом режиме не сохраняются).
+                val u = findUser(ME) ?: return fail(404, "Пользователь не найден")
+                val b = db.getJSONObject("bio").optJSONObject(ME.toString()) ?: return fail(404, "Пользователь не найден")
+                val map = mapOf("date_of_birth" to "dateOfBirth", "home_country" to "homeCountry")
+                val names = listOf("username", "status", "description", "date_of_birth", "home_country", "education", "workplace", "hobbies", "fandoms", "religion")
+                val updated = JSONArray()
+                names.filter { f.containsKey(it) }.forEach { k ->
+                    val v = f[k].orEmpty()
+                    if (k == "username" || k == "status") u.put(k, v) else b.put(map[k] ?: k, v)
+                    updated.put(k)
+                }
+                ok(obj("success" to true, "updated" to updated, "profilePicture" to JSONObject.NULL, "profileBackground" to JSONObject.NULL))
             }
             p == "/api/communities" && method == "POST" -> {
                 val name = f["username"].orEmpty().trim()

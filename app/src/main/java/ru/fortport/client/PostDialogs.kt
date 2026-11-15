@@ -1,6 +1,5 @@
 package ru.fortport.client
 
-import android.content.Intent
 import android.graphics.Color
 import android.view.Gravity
 import android.view.View
@@ -74,8 +73,7 @@ object PostDialogs {
     }
 
     private fun share(host: PostHost, p: Post) {
-        val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, postLink(p))
-        host.activity.startActivity(Intent.createChooser(i, "Поделиться постом"))
+        ShareDialog.show(host.activity, host.api, postLink(p), "Поделиться постом")
     }
 
     private fun toast(host: PostHost, s: String) = Toast.makeText(host.activity, s, Toast.LENGTH_SHORT).show()
