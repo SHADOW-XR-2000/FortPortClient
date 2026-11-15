@@ -702,11 +702,11 @@ class SettingsController(
      *  - при стирании ничего не подставляется, поэтому точки можно удалять;
      *  - при уходе из поля дата приводится к виду «дд.мм.гггг» (7.1.1990 → 07.01.1990, 07011990 → 07.01.1990).
      */
-    private fun dateInput(value: String, onChange: (String) -> Unit): EditText {
+    private fun dateInput(value: String, onChange: (String) -> Unit): View {
         val et = AeroUi.input(EditText(activity)).apply {
             setText(value)
             textSize = 16f
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setPadding(dp(12), dp(10), dp(48), dp(10))
             setSingleLine(true)
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
             hint = "дд.мм.гггг"
@@ -740,7 +740,59 @@ class SettingsController(
                 onChange(et.text.toString())
             }
         }
-        return et
+        // Иконка календаря у правого края поля: окно Aero с выбором дня, месяца и года (без ручного ввода).
+        val icon = UiUtil.text(activity, 22f, AeroUi.titleColor(activity)).apply {
+            text = "📅"; gravity = Gravity.CENTER
+            isClickable = true; isFocusable = false
+            setOnClickListener { hideKeyboard(); et.clearFocus(); showDatePicker(et.text.toString()) { et.setText(it) } }
+        }
+        return FrameLayout(activity).apply {
+            addView(et, FrameLayout.LayoutParams(-1, -2))
+            addView(icon, FrameLayout.LayoutParams(dp(44), -1, Gravity.END))
+        }
+    }
+
+    private val MONTHS = listOf("Января", "Февраля", "Марта", "Апреля", "Мая", "Июня", "Июля", "Августа", "Сентября", "Октября", "Ноября", "Декабря")
+
+    /** Окно выбора даты рождения: три выпадающих списка (день, месяц, год) и «ОК». [onPick] получает «дд.мм.гггг». */
+    private fun showDatePicker(current: String, onPick: (String) -> Unit) {
+        val now = Calendar.getInstance()
+        val maxYear = now.get(Calendar.YEAR)
+        val m = Regex("^(\\d{2})\\.(\\d{2})\\.(\\d{4})$").find(normalizeDob(current.trim()))
+        var year = (m?.groupValues?.get(3)?.toInt() ?: 2000).coerceIn(1900, maxYear)
+        var month = ((m?.groupValues?.get(2)?.toInt() ?: 1) - 1).coerceIn(0, 11)
+        fun daysIn(): Int = Calendar.getInstance().apply { clear(); set(year, month, 1) }.getActualMaximum(Calendar.DAY_OF_MONTH)
+        var day = (m?.groupValues?.get(1)?.toInt() ?: 1).coerceIn(1, daysIn())
+
+        val dlg = AeroDialog(activity, "Дата рождения")
+        val years = (maxYear downTo 1900).map { it.toString() }
+        lateinit var dayBtn: TextView
+        lateinit var monthBtn: TextView
+        lateinit var yearBtn: TextView
+        fun refresh() {
+            if (day > daysIn()) day = daysIn()
+            dayBtn.text = "%02d".format(day)
+            monthBtn.text = MONTHS[month]
+            yearBtn.text = year.toString()
+        }
+        // Смена месяца или года пересчитывает число дней (например, 31 → 28), refresh() обновляет подписи всех трёх кнопок.
+        dayBtn = AeroUi.dropdown(activity, { (1..daysIn()).map { "%02d".format(it) } }, { day - 1 }) { i -> day = i + 1; refresh() }
+        monthBtn = AeroUi.dropdown(activity, { MONTHS }, { month }) { i -> month = i; refresh() }
+        yearBtn = AeroUi.dropdown(activity, { years }, { maxYear - year }) { i -> year = maxYear - i; refresh() }
+        refresh()
+
+        val row = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(AeroUi.dropdownView(dayBtn), UiUtil.lp(0, UiUtil.WRAP, 0.8f))
+        row.addView(AeroUi.dropdownView(monthBtn), UiUtil.lp(0, UiUtil.WRAP, 1.5f).apply { leftMargin = dp(6) })
+        row.addView(AeroUi.dropdownView(yearBtn), UiUtil.lp(0, UiUtil.WRAP, 1.1f).apply { leftMargin = dp(6) })
+        dlg.body.addView(row, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP).apply { topMargin = dp(4) })
+        dlg.footer.addView(dlg.button("ОК") {
+            val cal = Calendar.getInstance().apply { clear(); set(year, month, day) }
+            if (cal.after(now)) { android.widget.Toast.makeText(activity, "Дата не может быть в будущем", android.widget.Toast.LENGTH_SHORT).show(); return@button }
+            onPick("%02d.%02d.%04d".format(day, month + 1, year))
+            dlg.dismiss()
+        }, UiUtil.lp(UiUtil.MATCH, UiUtil.WRAP))
+        dlg.show()
     }
 
     /** «7.1.1990», «07-01-1990», «07011990» → «07.01.1990»; нераспознанное возвращается как есть. */
