@@ -1755,18 +1755,7 @@ class MainActivity : AppCompatActivity() {
     )
 
     private fun showCdCoinsPurchaseDialog() {
-        val js = """
-            (function() {
-              fetch('/api/payments/options', {credentials: 'same-origin'})
-                .then(function(r) {
-                  if (!r.ok) throw new Error('HTTP ' + r.status);
-                  return r.json();
-                })
-                .then(function(data) { AndroidNav.onCoinsOptions(JSON.stringify(data)); })
-                .catch(function(e) { AndroidNav.onCoinsOptionsError(String(e)); });
-            })();
-        """.trimIndent()
-        webView.evaluateJavascript(js, null)
+        PaymentDialog(this, siteApi) { url -> openPaymentWebView(url) }.show()
     }
 
     private fun handleCdCoinsOptions(json: String) {
@@ -1895,7 +1884,14 @@ class MainActivity : AppCompatActivity() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val uri = request.url
                     return when (uri.scheme?.lowercase()) {
-                        "https", "http" -> false // платёжные редиректы и 3-D Secure остаются в приложении
+                        "https", "http" -> {
+                            // Возврат на fortport.ru (return_url) в платёжном слое не грузим: сайт не должен
+                            // получать/менять куки сессии из этого WebView. Просто закрываем слой и обновляем баланс.
+                            if (uri.host.equals(SITE_HOST, ignoreCase = true) || uri.host?.endsWith("." + SITE_HOST) == true) {
+                                view.post { closePaymentWebView() }
+                                true
+                            } else false // YooMoney, банки, 3-D Secure остаются в слое
+                        }
                         "tel", "mailto" -> {
                             try { startActivity(Intent(Intent.ACTION_VIEW, uri)) } catch (e: Exception) {
                                 Log.w(TAG, "Не удалось открыть ссылку из платёжной формы", e)
@@ -1940,6 +1936,18 @@ class MainActivity : AppCompatActivity() {
         }
         container.addView(payWebView)
         container.addView(payProgress)
+        // Кнопка закрытия поверх платёжной страницы (иначе выйти можно только системным «назад»).
+        val closeBtn = TextView(this).apply {
+            text = "✕"; textSize = 20f; gravity = android.view.Gravity.CENTER
+            setTextColor(android.graphics.Color.WHITE)
+            background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(0xAA000000.toInt()) }
+            val sz = (40 * resources.displayMetrics.density).toInt()
+            layoutParams = FrameLayout.LayoutParams(sz, sz, android.view.Gravity.TOP or android.view.Gravity.END).apply {
+                topMargin = (36 * resources.displayMetrics.density).toInt(); rightMargin = (10 * resources.displayMetrics.density).toInt()
+            }
+            setOnClickListener { closePaymentWebView() }
+        }
+        container.addView(closeBtn)
         root.addView(container)
 
         paymentWebView = payWebView
