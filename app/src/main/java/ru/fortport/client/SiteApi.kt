@@ -71,6 +71,32 @@ class SiteApi(private val activity: AppCompatActivity) {
     val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        // Повтор при обрыве рукопожатия/подключения: за VPN с fake-IP (INCY и т.п.) первое
+        // соединение к новому адресу может оборваться (SSLHandshakeException: connection closed),
+        // а следующая попытка проходит. Тело запроса при таком сбое ещё не отправлено,
+        // поэтому повтор безопасен и для POST.
+        .addInterceptor { chain ->
+            var attempt = 0
+            while (true) {
+                try {
+                    return@addInterceptor chain.proceed(chain.request())
+                } catch (e: javax.net.ssl.SSLHandshakeException) {
+                    if (++attempt > 3 || chain.call().isCanceled()) throw e
+                } catch (e: java.net.ConnectException) {
+                    if (++attempt > 3 || chain.call().isCanceled()) throw e
+                } catch (e: java.net.SocketTimeoutException) {
+                    // Таймаут может случиться и после отправки тела — повторяем только безопасные методы.
+                    val m = chain.request().method
+                    if ((m != "GET" && m != "HEAD") || ++attempt > 3 || chain.call().isCanceled()) throw e
+                }
+                try { Thread.sleep(400L * attempt) } catch (ie: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw java.io.IOException("interrupted", ie)
+                }
+            }
+            @Suppress("UNREACHABLE_CODE")
+            throw IllegalStateException()
+        }
         .addInterceptor { chain ->
             val req = chain.request()
             if (req.url.host != HOST) return@addInterceptor chain.proceed(req)
