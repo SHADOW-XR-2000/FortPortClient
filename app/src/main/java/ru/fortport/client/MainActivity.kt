@@ -2004,8 +2004,12 @@ class MainActivity : AppCompatActivity() {
             val custom = path.isNotEmpty() && path != "null" && path != "undefined"
             if (custom) {
                 val url = if (path.startsWith("http")) path else "$SITE_ORIGIN$path"
-                fetchBitmapAsync(url) { bitmap ->
-                    if (bitmap != null) navProfileAvatar.setImageBitmap(bitmap) else showDefaultAvatar()
+                fetchAvatarAsync(url) { bitmap, anim ->
+                    when {
+                        anim != null -> navProfileAvatar.setImageDrawable(anim) // GIF / animated WebP
+                        bitmap != null -> navProfileAvatar.setImageBitmap(bitmap)
+                        else -> showDefaultAvatar()
+                    }
                 }
             } else {
                 showDefaultAvatar() // аватар ещё не выбран владельцем аккаунта
@@ -2036,6 +2040,25 @@ class MainActivity : AppCompatActivity() {
             s = s.substring(1, s.length - 1)
         }
         return s.replace("\\\"", "\"").replace("\\\\", "\\")
+    }
+
+    /** Как [fetchBitmapAsync], но GIF / animated WebP отдаёт анимированным Drawable (Android 9+). */
+    private fun fetchAvatarAsync(url: String, onResult: (Bitmap?, android.graphics.drawable.Drawable?) -> Unit) {
+        Thread {
+            var bitmap: Bitmap? = null
+            var anim: android.graphics.drawable.Drawable? = null
+            try {
+                val connection = URL(url).openConnection() as HttpURLConnection
+                connection.connectTimeout = 8000
+                connection.readTimeout = 8000
+                val bytes = connection.inputStream.use { it.readBytes() }
+                if (AnimatedImages.isAnimated(bytes)) anim = AnimatedImages.decode(bytes, 256)
+                if (anim == null) bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (e: Exception) {
+                Log.w(TAG, "Не удалось загрузить аватар: $url", e)
+            }
+            runOnUiThread { onResult(bitmap, anim) }
+        }.start()
     }
 
     private fun fetchBitmapAsync(url: String, onResult: (Bitmap?) -> Unit) {

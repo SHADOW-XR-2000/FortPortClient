@@ -179,7 +179,7 @@ class ChatActivity : AppCompatActivity() {
         // Сразу показываем штатный ассет, чтобы нативный placeholder не мигал
         // и аватар не оставался пустым во время загрузки/при сетевой ошибке.
         setDefaultAvatar(avatar)
-        partnerAvatar?.let { loadImage(avatar, absUrl(it), 200) }
+        partnerAvatar?.let { loadImage(avatar, absUrl(it), 200, animate = true) }
 
         layoutManager = LinearLayoutManager(this).apply { stackFromEnd = false }
         adapter = ChatAdapter()
@@ -717,9 +717,18 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadImage(iv: ImageView, url: String, maxSide: Int) {
+    // Исходные байты анимированных аватарок (GIF / animated WebP) — Drawable на каждую View свой.
+    private val animBytes = object : LruCache<String, ByteArray>(4 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ByteArray) = value.size
+    }
+
+    /** [animate] — для аватарок: GIF / animated WebP показываются анимированными (Android 9+). */
+    private fun loadImage(iv: ImageView, url: String, maxSide: Int, animate: Boolean = false) {
         if (!isSiteUrl(url)) return
         iv.tag = url
+        if (animate) animBytes.get(url)?.let { b ->
+            AnimatedImages.decode(b, maxSide)?.let { iv.setImageDrawable(it); return }
+        }
         imgCache.get(url)?.let { iv.setImageBitmap(it); return }
         setDefaultAvatar(iv)
         imgPool.execute {
@@ -727,6 +736,14 @@ class ChatActivity : AppCompatActivity() {
                 val bytes = client.newCall(Request.Builder().url(url).get().build()).execute().use { r ->
                     if (!r.isSuccessful) return@execute
                     r.body?.bytes() ?: return@execute
+                }
+                if (animate && AnimatedImages.isAnimated(bytes)) {
+                    val anim = AnimatedImages.decode(bytes, maxSide)
+                    if (anim != null) {
+                        animBytes.put(url, bytes)
+                        main { if (iv.tag == url) iv.setImageDrawable(anim) }
+                        return@execute
+                    }
                 }
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)

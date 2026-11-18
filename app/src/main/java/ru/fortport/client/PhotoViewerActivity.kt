@@ -83,6 +83,7 @@ class PhotoViewerActivity : AppCompatActivity() {
     private val savedIds = HashSet<Long>()
     private val metaCache = HashMap<Long, Meta>()
     private val avatarCache = HashMap<String, Bitmap>()
+    private val avatarAnimCache = HashMap<String, ByteArray>() // исходные байты GIF/WebP-аватарок
     private val bytesCache = object : LruCache<String, ByteArray>(CACHE_BYTES) {
         override fun sizeOf(key: String, value: ByteArray): Int = value.size
     }
@@ -285,13 +286,28 @@ class PhotoViewerActivity : AppCompatActivity() {
 
     private fun loadAvatar(rawUrl: String, token: Int) {
         val url = resolveUrl(rawUrl) ?: return
+        avatarAnimCache[url]?.let { bytes ->
+            AnimatedImages.decode(bytes, AVATAR_MAX_SIDE)?.let { setAnimatedAvatar(it); return }
+        }
         avatarCache[url]?.let {
             setAvatar(it)
             return
         }
         io.execute {
             try {
-                val bmp = decodeSampled(httpGet(url), AVATAR_MAX_SIDE) ?: return@execute
+                val bytes = httpGet(url)
+                if (AnimatedImages.isAnimated(bytes)) {
+                    val anim = AnimatedImages.decode(bytes, AVATAR_MAX_SIDE)
+                    if (anim != null) {
+                        main.post {
+                            if (isFinishing) return@post
+                            avatarAnimCache[url] = bytes
+                            if (token == loadToken) setAnimatedAvatar(anim)
+                        }
+                        return@execute
+                    }
+                }
+                val bmp = decodeSampled(bytes, AVATAR_MAX_SIDE) ?: return@execute
                 main.post {
                     if (isFinishing) return@post
                     avatarCache[url] = bmp
@@ -307,7 +323,21 @@ class PhotoViewerActivity : AppCompatActivity() {
      * Аватарка — квадрат со скруглёнными углами. Сначала обрезаем bitmap до
      * квадрата по центру, затем скругляем углы (радиус — доля от стороны).
      */
+    /** Анимированная аватарка (GIF / animated WebP): квадрат по центру со скруглением через outline. */
+    private fun setAnimatedAvatar(d: Drawable) {
+        avatarView.scaleType = ImageView.ScaleType.CENTER_CROP
+        avatarView.outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: android.graphics.Outline) {
+                val side = minOf(view.width, view.height)
+                outline.setRoundRect(0, 0, view.width, view.height, side * AVATAR_CORNER_RATIO)
+            }
+        }
+        avatarView.clipToOutline = true
+        avatarView.setImageDrawable(d)
+    }
+
     private fun setAvatar(bitmap: Bitmap) {
+        avatarView.clipToOutline = false
         val side = minOf(bitmap.width, bitmap.height)
         val square = if (bitmap.width == bitmap.height) {
             bitmap
