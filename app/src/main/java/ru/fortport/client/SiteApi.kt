@@ -221,18 +221,41 @@ class SiteApi(private val activity: AppCompatActivity) {
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
     }
 
+    // Исходные байты анимированных аватарок (GIF / animated WebP): Drawable нельзя делить между View,
+    // поэтому для каждой View декодируем свой из кэшированных байтов.
+    private val animCache = object : LruCache<String, ByteArray>(8 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ByteArray) = value.size
+    }
+
+    private fun showAnimated(iv: ImageView, url: String, bytes: ByteArray): Boolean {
+        val d = AnimatedImages.decode(bytes, 256) ?: return false
+        if (iv.tag == url) iv.setImageDrawable(d)
+        return true
+    }
+
     fun loadAvatar(iv: ImageView, path: String) {
         val url = if (path.isBlank()) null else absUrl(path)
         iv.tag = url
         if (url == null) { iv.setImageBitmap(defaultAvatar); return }
+        animCache.get(url)?.let { if (showAnimated(iv, url, it)) return }
         imgCache.get(url)?.let { iv.setImageBitmap(it); return }
         iv.setImageBitmap(defaultAvatar)
         imgPool.execute {
-            val bmp = try {
+            val bytes = try {
                 client.newCall(Request.Builder().url(url).get().build()).execute().use { r ->
-                    if (!r.isSuccessful) null else r.body?.bytes()?.let { decodeSampled(it, 256) }
+                    if (!r.isSuccessful) null else r.body?.bytes()
                 }
-            } catch (e: Exception) { null }
+            } catch (e: Exception) { null } ?: return@execute
+            if (AnimatedImages.supported && AnimatedImages.isAnimated(bytes)) {
+                // Декодируем в фоне; если ImageDecoder не справился — ниже покажем первый кадр, как раньше.
+                val anim = AnimatedImages.decode(bytes, 256)
+                if (anim != null) {
+                    animCache.put(url, bytes)
+                    activity.runOnUiThread { if (!activity.isDestroyed && iv.tag == url) iv.setImageDrawable(anim) }
+                    return@execute
+                }
+            }
+            val bmp = decodeSampled(bytes, 256)
             if (bmp != null) {
                 imgCache.put(url, bmp)
                 activity.runOnUiThread { if (iv.tag == url) iv.setImageBitmap(bmp) }
