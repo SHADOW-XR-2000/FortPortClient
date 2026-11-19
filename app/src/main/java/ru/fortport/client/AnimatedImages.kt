@@ -8,7 +8,7 @@ import java.nio.ByteBuffer
 
 /**
  * Анимированные картинки (GIF и animated WebP) для аватарок.
- * BitmapFactory читает только первый кадр, поэтому такие файлы декодируем через ImageDecoder
+ * BitmapFactory читает только первый кадр, поэтому такие файлы декодируем через ImageDecoder 
  * (Android 9+, API 28); на Android 8.x остаётся статичный первый кадр.
  */
 object AnimatedImages {
