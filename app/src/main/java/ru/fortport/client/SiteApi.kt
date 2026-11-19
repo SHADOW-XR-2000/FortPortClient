@@ -19,7 +19,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
- * Общий слой для нативных разделов (переписки, друзья): HTTP-клиент с сессией сайта
+ * Общий слой для нативных разделов (переписки, друзья): HTTP-клиент с сессией сайта 
  * (куки WebView + X-Device-Id), загрузка аватарок с кэшем и фон страницы.
  *
  * Фон: стандартный (assets/styles/bg.webp) или пользовательский — поле profileBackground
