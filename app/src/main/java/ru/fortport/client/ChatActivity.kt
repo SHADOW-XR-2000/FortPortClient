@@ -58,7 +58,7 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Нативный экран диалога вместо веб-версии чата.
  *
- * Работает с тем же API, что и сайт (scripts/pages/chats.js):
+ * Работает с тем же API, что и сайт (scripts/pages/chats.js): 
  *  - GET  /api/chats/messages/{chatId}                 — последние 60 сообщений;
  *  - GET  /api/chats/messages/{chatId}/before/{id}     — подгрузка старых;
  *  - GET  /api/chats/{chatId}/wait                     — long-poll новых событий
