@@ -92,7 +92,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var notifsController: NotificationsController
     private lateinit var loginController: LoginController
 
-    /** Нативные экраны, которые показываются поверх WebView вместо веб-страниц /chats и /friends. */
+    /** Нативные экраны, которые показываются поверх WebView вместо веб-страниц /chats и /friends. */ 
     private enum class NativeSection { CHATS, FRIENDS, COMMUNITIES, MUSIC, FEED, POST, PROFILE, PORT, NOTIFS, SETTINGS, PORT_SETTINGS, INFO_PAGE, SEARCH }
     private var nativeSection: NativeSection? = null
     /** Чья музыка откроется в нативной вкладке: null — своя (выставляется при перехвате /music?id=…). */
